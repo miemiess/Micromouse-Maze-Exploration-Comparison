@@ -1,0 +1,3 @@
+# 仅用于拟实现的结果绘图；DFS/Flood-Fill 可使用 Python 标准库。
+# 首次正式实验时在 results 中记录实际版本；MMS 是单独安装的程序。
+matplotlib
