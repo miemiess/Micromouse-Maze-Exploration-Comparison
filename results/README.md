@@ -5,3 +5,5 @@
 建议字段：`maze_id`、`algorithm`、`run_id`、`status`、`steps`、`repeat_visits`、`turns_90`、`compute_seconds`、`peak_memory_bytes`。失败时保留状态与原因；成功路径指标缺失时留空，不填 0。
 
 记录仓库 commit、Python 与依赖版本、设备信息、预算、计时范围和地图版本；随机方法记录种子。所有实验关闭动画，绘图与磁盘写入不计入策略计算时间。最终图表需要能从原始 CSV 重新生成。
+
+多算法实验还应记录 `experiment_mode`（unknown_exploration / known_map_planning）、`config_id` 与创新方案的消融变体标识。开发集／测试集分开，未知地图和已知地图结果分别统计，不能混排。
