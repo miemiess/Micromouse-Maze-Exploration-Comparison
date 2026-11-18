@@ -2,7 +2,11 @@
 读写项目 JSON，以及地图库的导入验证与保存。
 
 保存的文件严格符合 src/README.md 的迷宫 JSON 格式，并由 environment.Maze 验证，
-存入地图库 MAP 后即可供上位机和实验使用。随机生成的地图会在 metadata 中记录生成器和种子。
+存入地图库（默认项目的 mazes/ 目录）后即可供上位机和实验使用。
+随机生成的地图会在 metadata 中记录生成器和种子。
+
+外部迷宫只读：文件名以 external_ 开头的地图（A3 整理的比赛迷宫）永远不会被覆盖，
+修改后保存会自动另存为新地图，并在 metadata 中记录改自哪张地图。
 """
 
 import json
@@ -14,6 +18,14 @@ from simulation import DELTAS, Direction, Maze, maze_walls
 
 Cell = tuple[int, int]
 Edge = frozenset
+
+# 外部比赛迷宫的文件名前缀（见 mazes/README.md），这类文件只读。
+PROTECTED_PREFIX = "external_"
+
+
+def is_protected_file(path: str | Path | None) -> bool:
+    """文件是否为只读的外部迷宫：文件名以 external_ 开头且文件已存在。"""
+    return path is not None and Path(path).name.startswith(PROTECTED_PREFIX) and Path(path).exists()
 
 
 def default_goals(width: int, height: int) -> set[Cell]:
@@ -52,6 +64,11 @@ class MazeDocument:
         self.path: Path | None = None
         self.dirty = False
         self.revision = 0
+
+    @property
+    def read_only(self) -> bool:
+        """当前对应的文件是否为只读的外部迷宫（可以编辑，但保存时会另存为新地图）。"""
+        return is_protected_file(self.path)
 
     # -- 读写 -------------------------------------------------------------
     @classmethod
@@ -211,11 +228,13 @@ class MazeDocument:
 
 
 class MapLibrary:
-    """地图库：一个专门存放迷宫 JSON 的文件夹（上位机使用 tools/MazesTest/MAP）。
+    """地图库：一个专门存放迷宫 JSON 的文件夹（上位机默认使用项目的 mazes/）。
 
     - 导入：先完整验证外部文件，合法后以规范格式保存为 <maze_id>.json；
-    - 保存：库内地图原地覆盖；从库外打开的文件另存一份到库中，不修改原文件；
-    - 重名时抛出 FileExistsError，由调用方决定是否覆盖。
+    - 保存：一律写到 <maze_id>.json。地图 ID 未改时原地覆盖；改了 ID 相当于另存为新文件；
+      从库外打开的文件另存一份到库中，不修改原文件；
+    - 只读保护：目标是 external_*.json 外部迷宫时绝不覆盖，自动改名另存（见 derive_id）；
+    - 其他重名情况抛出 FileExistsError，由调用方决定是否覆盖。
     """
 
     def __init__(self, folder: str | Path):
@@ -263,14 +282,38 @@ class MapLibrary:
             raise ValueError("迷宫格式不合法：" + "；".join(errors))
         return doc, warnings
 
+    def derive_id(self, maze_id: str) -> str:
+        """为改自外部迷宫的地图生成不冲突的新 ID。
+
+        去掉 external_ 前缀（新地图不再是外部原始数据，也就不再只读），加 _edit 后缀；
+        已存在时依次尝试 _edit2、_edit3……
+        例如 external_uk2011f → uk2011f_edit。
+        """
+        base = maze_id.removeprefix(PROTECTED_PREFIX) + "_edit"
+        candidate, number = base, 1
+        while self.path_for(candidate).exists():
+            number += 1
+            candidate = f"{base}{number}"
+        return candidate
+
     def save(self, doc: MazeDocument, *, overwrite: bool = False) -> Path:
-        """把地图保存进库中。
+        """把地图保存进库中，返回写入的文件。
+
+        目标是只读的外部迷宫时，不会覆盖它：doc 会改用 derive_id 生成的新 ID，
+        metadata 记录 derived_from（原地图 ID），然后保存为新文件。
+        调用方可比较保存前后的 doc.maze_id 得知是否发生了另存。
 
         Raises:
-            FileExistsError: 目标文件已存在且不是本地图自己的文件，并且 overwrite 为 False。
+            FileExistsError: 目标文件已存在、不是本地图自己的文件，且 overwrite 为 False。
             ValueError: 地图不合法。
         """
-        target = doc.path if self.contains(doc.path) else self.path_for(doc.maze_id)
+        target = self.path_for(doc.maze_id)
+        if is_protected_file(target):
+            original = doc.maze_id
+            doc.maze_id = self.derive_id(original)
+            doc.metadata = {**doc.metadata, "derived_from": original,
+                            "notes": f"基于外部迷宫 {original} 修改；原文件只读，自动另存"}
+            target = self.path_for(doc.maze_id)
         same_file = doc.path is not None and Path(doc.path).resolve() == target.resolve()
         if target.exists() and not same_file and not overwrite:
             raise FileExistsError(str(target))

@@ -7,6 +7,6 @@ Yuchen Han 2026-11-17 实现 src/environment.py，转换 3 张外部 16x16 比�
 Luca 2026-11-18 认领 B2，实现 src/dfs.py（DFS + 实际回溯）和 src/flood_fill.py（Flood-Fill 探索）
 Luca 2026-11-18 新增 tools/MazesTest 可视化上位机（PySide6）：实时运行、多算法对比、地图编辑与随机生成、PNG/GIF 导出
 Luca 2026-11-18 environment.py 补充函数注释，requirements.txt 加入 PySide6，添加策略/运行核心/应用测试
-Luca 2026-11-18 上位机新增 tools/MazesTest/MAP 地图库：下拉框选择、导入（验证合法性）、导出
-Luca 2026-11-18 mazes/ 并入上位机：地图移至 tools/MazesTest/MAP，转换脚本移至 tools/MazesTest，更新引用路径与测试
+Luca 2026-11-18 上位机新增地图库功能：下拉框选择、导入（验证合法性）、导出
 Luca 2026-11-18 README 任务表交付说明对齐当前内容（A1-A3、B2 标记完成、D3）；Flood-Fill 同距离时补充优先未访问格，对齐基础实验约定
+Luca 2026-11-18 地图恢复为独立目录 mazes/（上位机默认读取）；外部迷宫 external_* 只读，修改后自动另存为新地图

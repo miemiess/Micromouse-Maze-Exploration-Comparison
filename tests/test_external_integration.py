@@ -25,7 +25,7 @@ class ExternalMazeIntegrationTests(unittest.TestCase):
         """逐张加载外部地图，让电脑鼠依靠观测探索到目标。"""
         for filename in FILES:
             with self.subTest(maze=filename):
-                path = ROOT / "tools" / "MazesTest" / "MAP" / filename
+                path = ROOT / "mazes" / filename
                 raw = json.loads(path.read_text(encoding="utf-8"))
                 maze = Maze.from_json(path)
                 env = MazeEnvironment(maze)

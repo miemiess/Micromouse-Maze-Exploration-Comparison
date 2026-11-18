@@ -621,7 +621,7 @@ class EditorTab(QWidget):
     Signals:
         documentEdited: 当前地图内容被修改。
         documentReplaced(MazeDocument): 新建或随机生成了另一张地图。
-        saveRequested: 点击了"保存到 MAP"，由主窗口写入地图库。
+        saveRequested: 点击了"保存到地图库"，由主窗口写入地图库。
         exportRequested: 点击了"导出…"，由主窗口选择位置导出。
     """
 
@@ -705,8 +705,8 @@ class EditorTab(QWidget):
 
         file_box = QGroupBox("文件")
         file_row = QHBoxLayout(file_box)
-        save_button = QPushButton("💾 保存到 MAP")
-        save_button.setToolTip("保存到 tools/MazesTest/MAP；MAP 外打开的地图存为 <地图 ID>.json")
+        save_button = QPushButton("💾 保存到地图库")
+        save_button.setToolTip("保存到 mazes/<地图 ID>.json；外部迷宫（external_*）只读，修改后自动另存为新地图")
         save_button.clicked.connect(self.saveRequested)
         export_button = QPushButton("导出…")
         export_button.setToolTip("把当前地图另存一份到任意位置，不改变当前地图对应的文件")
@@ -737,7 +737,13 @@ class EditorTab(QWidget):
         self.heading.blockSignals(False)
         self.size_label.setText(f"{doc.width} × {doc.height}，内部墙 {len(doc.walls)} 面")
         path = doc.path.name if doc.path else "未保存"
-        self.source_label.setText(f"{path} · {doc.metadata.get('source', '-')}")
+        text = f"{path} · {doc.metadata.get('source', '-')}"
+        if doc.read_only:
+            text += ("<br><span style='color:#d68910'>🔒 外部迷宫只读：可以编辑，"
+                     "保存时自动另存为新地图</span>")
+        elif doc.metadata.get("derived_from"):
+            text += f"<br>改自 {doc.metadata['derived_from']}"
+        self.source_label.setText(text)
         errors, warnings = doc.check()
         lines = [f"<span style='color:#c0392b'>错误：{e}</span>" for e in errors]
         lines += [f"<span style='color:#d68910'>提醒：{w}</span>" for w in warnings]

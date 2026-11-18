@@ -25,7 +25,7 @@ if HAS_QT:
     from maze_app import main as app_main
     from simulation import Maze, Runner, discover_strategies, load_strategy
 
-MAZE = ROOT / "tools" / "MazesTest" / "MAP" / "external_uk2011f.json"
+MAZE = ROOT / "mazes" / "external_uk2011f.json"
 
 
 @unittest.skipUnless(HAS_QT, "PySide6 not installed")
@@ -38,7 +38,7 @@ class AppTests(unittest.TestCase):
     def setUp(self):
         """每个测试打开一个新主窗口，地图库使用临时目录。"""
         self.tmp = tempfile.TemporaryDirectory()
-        self.map_dir = Path(self.tmp.name) / "MAP"
+        self.map_dir = Path(self.tmp.name) / "mazes"
         self.window = MainWindow(MAZE, map_dir=self.map_dir)
         self.window.show()
 
@@ -49,7 +49,7 @@ class AppTests(unittest.TestCase):
         self.tmp.cleanup()
 
     def test_map_library_import_and_save(self):
-        """导入的地图进入 MAP 并出现在下拉框；库外打开的地图修改后保存为 MAP 中的副本。"""
+        """导入的地图进入地图库并出现在下拉框；库外打开的地图修改后保存为库中的副本。"""
         from maze_document import generate
         source = generate(6, 6, seed=4, maze_id="imported").export(Path(self.tmp.name) / "x.json")
         self.assertTrue(self.window.import_path(source))
@@ -57,7 +57,7 @@ class AppTests(unittest.TestCase):
         self.assertEqual(self.window.map_combo.currentText(), "imported")
 
         original = MAZE.read_bytes()
-        self.window.open_path(MAZE)  # 测试用的地图库是临时目录，真实 MAP 相当于库外文件
+        self.window.open_path(MAZE)  # 测试用的地图库是临时目录，真实 mazes/ 相当于库外文件
         self.assertIn("外部文件", self.window.map_combo.currentText())
         self.window.editor_tab._on_edge_clicked((0, 0), (0, 1))
         self.assertTrue(self.window.save_to_library())
@@ -78,6 +78,22 @@ class AppTests(unittest.TestCase):
         self.assertIn("路线重新规划", tab.log.toPlainText())
         tab.display.boxes["fog"].setChecked(True)
         self.assertFalse(tab.view.grab().isNull())
+
+    def test_external_map_saved_as_new_file(self):
+        """在上位机里修改外部迷宫后保存：原文件不变，自动另存为新地图并出现在下拉框。"""
+        import shutil
+        external = Path(shutil.copy(MAZE, self.map_dir / MAZE.name))
+        original = external.read_bytes()
+        self.window.open_path(external)
+        self.assertTrue(self.window.save_to_library())  # 未修改：不写文件
+        self.assertEqual(len(self.window.library.maps()), 1)
+
+        self.window.editor_tab._on_edge_clicked((0, 0), (0, 1))
+        self.assertTrue(self.window.save_to_library())
+        self.assertEqual(self.window.document.path.name, "uk2011f_edit.json")
+        self.assertIn("只读", self.window.statusBar().currentMessage())
+        self.assertEqual(external.read_bytes(), original)
+        self.assertEqual(self.window.map_combo.currentText(), "uk2011f_edit")
 
     def test_compare_tab_runs_all_selected(self):
         """对比页为每个勾选的算法建立画布，跑完后表格每行都是"到达目标"。"""
@@ -146,7 +162,7 @@ class ExportTests(unittest.TestCase):
 
     def test_command_line_batch_export(self):
         """命令行批量导出：每张地图一张 PNG；指定算法时文件名带算法名。"""
-        pattern = str(ROOT / "tools" / "MazesTest" / "MAP" / "*.json")
+        pattern = str(ROOT / "mazes" / "*.json")
         with contextlib.redirect_stdout(io.StringIO()):
             app_main(["--export", pattern, "-o", str(self.out), "--size", "300"])
             app_main(["--export", str(MAZE), "-o", str(self.out), "--strategy", "dfs"])

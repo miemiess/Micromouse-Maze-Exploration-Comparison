@@ -1,13 +1,13 @@
 """电脑鼠迷宫探索桌面应用（PySide6）的启动入口，也支持不打开窗口的批量导出。
 
 打开应用：
-    python tools/MazesTest/maze_app.py                                   # 打开 MAP 中的第一张地图
-    python tools/MazesTest/maze_app.py tools/MazesTest/MAP/external_uk2011f.json
+    python tools/MazesTest/maze_app.py                                   # 打开 地图库中的第一张地图
+    python tools/MazesTest/maze_app.py mazes/external_uk2011f.json
 
 批量导出（不显示窗口，默认输出到 results/figures/）：
-    python tools/MazesTest/maze_app.py --export "tools/MazesTest/MAP/*.json"                       # 每张地图一张 PNG
-    python tools/MazesTest/maze_app.py --export "tools/MazesTest/MAP/*.json" --strategy flood_fill  # 运行到结束后的画面
-    python tools/MazesTest/maze_app.py --export tools/MazesTest/MAP/external_uk2011f.json --strategy dfs --gif
+    python tools/MazesTest/maze_app.py --export "mazes/*.json"                       # 每张地图一张 PNG
+    python tools/MazesTest/maze_app.py --export "mazes/*.json" --strategy flood_fill  # 运行到结束后的画面
+    python tools/MazesTest/maze_app.py --export mazes/external_uk2011f.json --strategy dfs --gif
 """
 
 import argparse

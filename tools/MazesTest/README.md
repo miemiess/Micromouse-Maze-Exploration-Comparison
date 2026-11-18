@@ -13,17 +13,20 @@ pip install -r requirements.txt
 ## 启动
 
 ```
-python tools/MazesTest/maze_app.py                                  # 打开 MAP 中的第一张地图
-python tools/MazesTest/maze_app.py tools/MazesTest/MAP/external_uk2011f.json
+python tools/MazesTest/maze_app.py                                  # 打开 mazes/ 中的第一张地图
+python tools/MazesTest/maze_app.py mazes/external_uk2011f.json
 ```
 
-**地图库 `tools/MazesTest/MAP/`**：项目全部迷宫地图的存放处，上位机和实验共用，来源说明见 [MAP/README.md](MAP/README.md)。工具栏左侧的下拉框列出其中所有地图。
-- **导入地图**（Ctrl+O）：选择任意位置的 JSON 文件，先完整验证再复制进 MAP，保存为 `<地图 ID>.json`。
+**地图库**：上位机默认读取项目独立的地图目录 `mazes/`，实验也使用这里，来源说明见 [mazes/README.md](../../mazes/README.md)。工具栏左侧的下拉框列出其中所有地图。
+- **导入地图**（Ctrl+O）：选择任意位置的 JSON 文件，先完整验证再复制进 `mazes/`，保存为 `<地图 ID>.json`。
   - 拒绝导入的情况：不是 JSON，或缺字段、类型错误、坐标越界、墙两端不相邻、重复墙、没有目标。会弹窗说明原因。
   - 合法但有提醒的情况（如目标不可达）：询问后可以导入。
-  - MAP 中已有同名地图时，会询问是否覆盖。
+  - 地图库中已有同名地图时，会询问是否覆盖。
 - **导出地图**（Ctrl+Shift+S）：把当前地图另存一份到任意位置，不改变当前打开的文件。
-- **保存到 MAP**（Ctrl+S）：MAP 中的地图原地保存。通过命令行参数打开的 MAP 外文件，保存时在 MAP 中另存为 `<地图 ID>.json`，原文件不变。
+- **保存到地图库**（Ctrl+S）：保存为 `mazes/<地图 ID>.json`。
+  - 地图 ID 没改：原地保存。改了 ID：另存为新文件，原文件保留。
+  - 从地图库外打开的文件：在地图库中另存一份，原文件不变。
+  - **外部迷宫只读**：`external_*.json` 是整理好的比赛迷宫，永远不会被覆盖。修改后保存会自动另存为新地图，去掉前缀、加 `_edit` 后缀，重名时依次编号，例如 `external_uk2011f` → `uk2011f_edit`、`uk2011f_edit2`。`metadata.derived_from` 记录原地图，编辑页"来源"一栏显示 🔒 标记。自己的地图不要使用 `external_` 前缀。
 
 **实时运行**：选择算法后点"单步"或"运行"，可以调整速度、种子和移动预算。
 - 黑色墙是电脑鼠已观测到的墙，灰色是还没观测到的墙。勾选"迷雾模式"后只显示已观测的部分，未到过的格子会变暗，相当于电脑鼠自己的视角。
@@ -37,7 +40,7 @@ python tools/MazesTest/maze_app.py tools/MazesTest/MAP/external_uk2011f.json
 - 墙工具：点击格子边缘加墙或拆墙。起点 / 目标工具：点击格子设置。
 - 可以新建空白地图，也可以按尺寸、种子、环路比例随机生成。生成器为递归回溯，种子会写入 `metadata`，方便复现。
 - "检查"区域显示地图是否有效、目标是否可达。目标不可达的地图仍可保存，用于无路测试。
-- "保存到 MAP"、"导出…"的规则同上。保存的文件就是项目 JSON 格式，可以直接用于实验。注意：直接修改并保存 MAP 中已有的地图，会覆盖实验地图；修改外部比赛迷宫前，建议先在"地图属性"里改一个新的地图 ID。编辑后切到运行页或对比页，会自动用新地图重新开始。
+- "保存到地图库"、"导出…"的规则同上。保存的文件就是项目 JSON 格式，可以直接用于实验。外部比赛迷宫受只读保护；自己的地图修改后会原地覆盖，正式实验前请在结果中记录所用地图文件和提交号。编辑后切到运行页或对比页，会自动用新地图重新开始。
 
 **新算法**：在 `src/` 中新增实现 Strategy 接口的类（`name`、`reset`、`choose_direction`），重启应用后会自动出现在算法列表中，不需要改动工具。
 
@@ -46,9 +49,9 @@ python tools/MazesTest/maze_app.py tools/MazesTest/MAP/external_uk2011f.json
 不打开窗口，默认输出到 `results/figures/`：
 
 ```
-python tools/MazesTest/maze_app.py --export "tools/MazesTest/MAP/*.json"                       # 每张地图一张 PNG
-python tools/MazesTest/maze_app.py --export "tools/MazesTest/MAP/*.json" --strategy flood_fill  # 运行到结束后的画面
-python tools/MazesTest/maze_app.py --export tools/MazesTest/MAP/external_uk2011f.json --strategy dfs --gif
+python tools/MazesTest/maze_app.py --export "mazes/*.json"                       # 每张地图一张 PNG
+python tools/MazesTest/maze_app.py --export "mazes/*.json" --strategy flood_fill  # 运行到结束后的画面
+python tools/MazesTest/maze_app.py --export mazes/external_uk2011f.json --strategy dfs --gif
 ```
 
 可选参数：`-o 目录`、`--seed`、`--size 宽度像素`。导出的图片和界面画法完全一致；图片标题使用英文，可以直接放进报告。
@@ -76,9 +79,7 @@ def debug_view(self) -> dict:
 | 文件 | 职责 |
 | --- | --- |
 | `simulation.py` | 运行核心（不依赖界面库）：发现 `src/` 中的策略；`Runner` 逐步运行并生成快照，包括已观测墙、新发现的墙、是否重新规划和实时统计 |
-| `maze_document.py` | 地图编辑模型与地图库（不依赖界面库）：改墙、设起点和目标、检查、随机生成、读写 JSON；`MapLibrary` 负责导入验证和存入 MAP |
-| `MAP/` | 项目全部迷宫地图（含外部比赛迷宫、来源说明 README 和上游许可证） |
-| `convert_external.py` | 把上游 `.maz` 二进制迷宫转换为项目 JSON |
+| `maze_document.py` | 地图编辑模型与地图库（不依赖界面库）：改墙、设起点和目标、检查、随机生成、读写 JSON；`MapLibrary` 负责导入验证、存入地图库和外部迷宫只读保护 |
 | `app/maze_view.py` | 迷宫画布：用 QPainter 绘制地图和运行状态，编辑模式下响应点击 |
 | `app/tabs.py` | 三个功能页，以及共用的运行控制器、控制面板、显示选项 |
 | `app/main_window.py` | 主窗口：地图下拉框、导入 / 导出 / 保存、菜单、未保存修改提示，并在功能页之间同步地图 |

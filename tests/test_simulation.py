@@ -11,7 +11,7 @@ from maze_document import MapLibrary, MazeDocument, default_goals, generate  # n
 from simulation import (Direction, Maze, Runner, discover_strategies,  # noqa: E402
                         load_strategy, maze_walls)
 
-MAZE = ROOT / "tools" / "MazesTest" / "MAP" / "external_uk2011f.json"
+MAZE = ROOT / "mazes" / "external_uk2011f.json"
 
 
 class Scripted:
@@ -141,7 +141,7 @@ class MapLibraryTests(unittest.TestCase):
         """每个测试使用独立的临时地图库。"""
         self.tmp = tempfile.TemporaryDirectory()
         self.dir = Path(self.tmp.name)
-        self.library = MapLibrary(self.dir / "MAP")
+        self.library = MapLibrary(self.dir / "mazes")
 
     def tearDown(self):
         """删除临时文件夹。"""
@@ -195,8 +195,46 @@ class MapLibraryTests(unittest.TestCase):
         path = self.library.save(doc)
         self.assertEqual(path.parent, self.library.folder)
         self.assertEqual(MAZE.read_bytes(), original)
+        # 存进库的这份仍是 external_* 外部迷宫，同样只读：再次修改会另存为新地图。
         doc.toggle_wall((0, 0), (0, 1))
-        self.assertEqual(self.library.save(doc), path)  # 已在库中：原地覆盖，不需确认
+        self.assertEqual(self.library.save(doc).name, "uk2011f_edit.json")
+        self.assertTrue(path.exists())
+
+    def test_external_maps_are_read_only(self):
+        """外部迷宫修改后保存会另存为新地图并记录来源；原文件不变；重复另存时编号递增。"""
+        import shutil
+        external = Path(shutil.copy(MAZE, self.library.folder / MAZE.name))
+        original = external.read_bytes()
+
+        doc = MazeDocument.load(external)
+        self.assertTrue(doc.read_only)
+        doc.toggle_wall((0, 0), (0, 1))
+        path = self.library.save(doc)
+        self.assertEqual(path.name, "uk2011f_edit.json")
+        self.assertEqual(doc.metadata["derived_from"], "external_uk2011f")
+        self.assertFalse(doc.read_only)
+        self.assertEqual(external.read_bytes(), original)
+
+        doc.toggle_wall((0, 0), (0, 1))
+        self.assertEqual(self.library.save(doc), path)  # 新地图不再只读，原地保存
+
+        again = MazeDocument.load(external)
+        again.toggle_wall((1, 1), (1, 2))
+        self.assertEqual(self.library.save(again).name, "uk2011f_edit2.json")
+        with self.assertRaises(FileExistsError):  # 新地图之间重名仍需确认
+            renamed = MazeDocument.load(path)
+            renamed.maze_id = "uk2011f_edit2"
+            self.library.save(renamed)
+        self.library.save(MazeDocument.load(external), overwrite=True)  # 即使要求覆盖也不改原文件
+        self.assertEqual(external.read_bytes(), original)
+
+    def test_renaming_saves_as_new_file(self):
+        """修改地图 ID 后保存会写入新文件，原文件保留。"""
+        doc = generate(4, 4, seed=5, maze_id="first")
+        first = self.library.save(doc)
+        doc.maze_id = "second"
+        self.assertEqual(self.library.save(doc).name, "second.json")
+        self.assertTrue(first.exists())
 
     def test_export_keeps_document_path(self):
         """导出只写副本，不改变当前地图对应的文件和未保存状态。"""

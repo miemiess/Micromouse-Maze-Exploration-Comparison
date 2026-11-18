@@ -10,7 +10,7 @@ from dfs import DfsStrategy  # noqa: E402
 from environment import Maze, MazeEnvironment  # noqa: E402
 from flood_fill import FloodFillStrategy  # noqa: E402
 
-EXTERNAL = sorted((ROOT / "tools" / "MazesTest" / "MAP").glob("external_*.json"))
+EXTERNAL = sorted((ROOT / "mazes").glob("external_*.json"))
 
 
 def run(maze: Maze, strategy) -> dict:

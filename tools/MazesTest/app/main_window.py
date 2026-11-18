@@ -1,9 +1,9 @@
-"""主窗口：地图库（tools/MazesTest/MAP）的选择、导入、导出与保存，三个功能页，菜单与"未保存修改"处理。
+"""主窗口：地图库（项目的 mazes/ 目录）的选择、导入、导出与保存，三个功能页，菜单与"未保存修改"处理。
 
 主窗口持有唯一的当前地图（MazeDocument）。编辑页直接修改它；切换到运行页或对比页时，
 若地图有改动，就验证后转换为 Maze 交给这两页重新开始，保证运行的总是最新地图。
 
-地图下拉框列出地图库 tools/MazesTest/MAP 中的全部地图（项目唯一的地图目录）。
+地图下拉框列出地图库 mazes/ 中的全部地图（上位机与实验共用）。
 """
 
 from pathlib import Path
@@ -13,16 +13,18 @@ from PySide6.QtWidgets import (QComboBox, QFileDialog, QLabel, QMainWindow, QMes
                                QTabWidget, QToolBar)
 
 from maze_document import MapLibrary, MazeDocument, generate
-from simulation import discover_strategies
+from simulation import ROOT, discover_strategies
 
 from .tabs import CompareTab, EditorTab, RunTab
 
-MAP_DIR = Path(__file__).resolve().parents[1] / "MAP"  # tools/MazesTest/MAP
+MAZE_DIR = ROOT / "mazes"  # 项目独立的地图目录
 
 HELP_TEXT = """<h3>电脑鼠迷宫探索</h3>
-<p><b>地图</b>：下拉框中列出地图库 tools/MazesTest/MAP 中的全部地图。
-"导入"会先验证文件是否为合法迷宫，再复制进 MAP；"导出"把当前地图另存到任意位置；
-"保存到 MAP"把编辑结果写回地图库。</p>
+<p><b>地图</b>：下拉框中列出地图库 mazes/ 中的全部地图。
+"导入"会先验证文件是否为合法迷宫，再复制进地图库；"导出"把当前地图另存到任意位置；
+"保存到地图库"把编辑结果写回地图库。</p>
+<p><b>外部迷宫只读</b>：external_*.json 是整理好的比赛迷宫，不会被覆盖。修改后保存时自动另存为
+新地图（例如 external_uk2011f → uk2011f_edit），metadata 中记录 derived_from。</p>
 <p><b>实时运行</b>：选择算法后点"运行"或"单步"。算法与实验使用同一个环境（src/environment.py），
 统计数字就是环境真实记录的结果。</p>
 <ul>
@@ -39,12 +41,12 @@ HELP_TEXT = """<h3>电脑鼠迷宫探索</h3>
 class MainWindow(QMainWindow):
     """应用主窗口。"""
 
-    def __init__(self, initial: Path | None = None, *, map_dir: Path = MAP_DIR):
+    def __init__(self, initial: Path | None = None, *, map_dir: Path = MAZE_DIR):
         """发现策略、创建三个功能页，并打开初始地图。
 
         Args:
-            initial: 启动时打开的迷宫文件；None 时打开 MAP 中的第一张，没有则随机生成一张。
-            map_dir: 地图库文件夹，默认 tools/MazesTest/MAP（测试时可换成临时目录）。
+            initial: 启动时打开的迷宫文件；None 时打开 地图库中的第一张，没有则随机生成一张。
+            map_dir: 地图库文件夹，默认项目的 mazes/（测试时可换成临时目录）。
         """
         super().__init__()
         self.library = MapLibrary(map_dir)
@@ -97,12 +99,12 @@ class MainWindow(QMainWindow):
         toolbar.addWidget(self.map_combo)
 
         import_action = QAction("导入地图…", self, shortcut=QKeySequence.Open)
-        import_action.setToolTip("验证外部迷宫文件，合法后复制进 tools/MazesTest/MAP")
+        import_action.setToolTip("验证外部迷宫文件，合法后复制进地图库 mazes/")
         import_action.triggered.connect(self.import_dialog)
         export_action = QAction("导出地图…", self, shortcut=QKeySequence.SaveAs)
         export_action.setToolTip("把当前地图另存到任意位置")
         export_action.triggered.connect(self.export_dialog)
-        save_action = QAction("保存到 MAP", self, shortcut=QKeySequence.Save)
+        save_action = QAction("保存到地图库", self, shortcut=QKeySequence.Save)
         save_action.triggered.connect(self.save_to_library)
         quit_action = QAction("退出", self, shortcut=QKeySequence.Quit)
         quit_action.triggered.connect(self.close)
@@ -117,7 +119,7 @@ class MainWindow(QMainWindow):
         self.menuBar().addMenu("帮助").addAction(help_action)
 
     def _populate_maps(self) -> None:
-        """刷新地图下拉框：MAP 中的地图，以及不在 MAP 中的当前地图（外部文件或未保存）。"""
+        """刷新地图下拉框：地图库中的地图，以及不在 地图库中的当前地图（外部文件或未保存）。"""
         self.map_combo.blockSignals(True)
         self.map_combo.clear()
         for path in self.library.maps():
@@ -190,10 +192,10 @@ class MainWindow(QMainWindow):
 
     # -- 地图库：导入、导出、保存 -----------------------------------------
     def import_path(self, path: Path) -> bool:
-        """验证外部地图文件，合法后复制进 MAP 并打开。
+        """验证外部地图文件，合法后复制进地图库 并打开。
 
         不合法时说明原因并拒绝导入；有提醒（如目标不可达）时询问是否继续；
-        MAP 中已有同名地图时询问是否覆盖。返回是否导入成功。
+        地图库中已有同名地图时询问是否覆盖。返回是否导入成功。
         """
         try:
             doc, warnings = self.library.validate_file(path)
@@ -236,16 +238,27 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "导出失败", str(exc))
 
     def save_to_library(self) -> bool:
-        """把当前地图保存到 MAP；返回是否保存成功。"""
+        """把当前地图保存到地图库；返回是否保存成功。
+
+        外部迷宫（只读）修改后会另存为新地图，状态栏说明新文件名；未修改时不写文件。
+        """
         doc = self.document
         if doc is None or not self._check_savable(doc):
             return False
+        if not doc.dirty and self.library.contains(doc.path):
+            self.statusBar().showMessage("地图没有修改，无需保存", 5000)
+            return True
+        original_id = doc.maze_id
         if not self._save_into_library(doc):
             return False
         self.editor_tab.refresh()
         self._populate_maps()
         self._update_title()
-        self.statusBar().showMessage(f"已保存：{doc.path}", 8000)
+        if doc.maze_id != original_id and doc.metadata.get("derived_from") == original_id:
+            message = f"{original_id} 是只读的外部迷宫，修改已另存为新地图：{doc.path.name}"
+        else:
+            message = f"已保存：{doc.path}"
+        self.statusBar().showMessage(message, 10000)
         return True
 
     def _check_savable(self, doc: MazeDocument) -> bool:
@@ -263,7 +276,7 @@ class MainWindow(QMainWindow):
         except FileExistsError:
             target = self.library.path_for(doc.maze_id)
             if QMessageBox.question(self, "地图已存在",
-                                    f"MAP 中已有 {target.name}，是否覆盖？") != QMessageBox.Yes:
+                                    f"地图库中已有 {target.name}，是否覆盖？") != QMessageBox.Yes:
                 return False
             self.library.save(doc, overwrite=True)
             return True
@@ -272,11 +285,11 @@ class MainWindow(QMainWindow):
             return False
 
     def confirm_discard(self) -> bool:
-        """当前地图有未保存修改时询问：保存到 MAP / 放弃 / 取消。返回是否可以继续。"""
+        """当前地图有未保存修改时询问：保存到地图库 / 放弃 / 取消。返回是否可以继续。"""
         if not (self.document and self.document.dirty):
             return True
         answer = QMessageBox.question(
-            self, "未保存的修改", f"地图 {self.document.maze_id} 有未保存的修改，是否保存到 MAP？",
+            self, "未保存的修改", f"地图 {self.document.maze_id} 有未保存的修改，是否保存到地图库？",
             QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel)
         if answer == QMessageBox.Save:
             return self.save_to_library()

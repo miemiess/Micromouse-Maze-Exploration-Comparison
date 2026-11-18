@@ -4,4 +4,4 @@
 
 | 文件夹 | 说明 |
 | --- | --- |
-| [MazesTest/](MazesTest/README.md) | 迷宫探索上位机（PySide6）：实时运行算法、多算法同屏对比、地图编辑与地图库（MAP）、PNG/GIF 导出。启动：`python tools/MazesTest/maze_app.py` |
+| [MazesTest/](MazesTest/README.md) | 迷宫探索上位机（PySide6）：实时运行算法、多算法同屏对比、地图编辑与地图库（读写 mazes/，外部迷宫只读）、PNG/GIF 导出。启动：`python tools/MazesTest/maze_app.py` |
