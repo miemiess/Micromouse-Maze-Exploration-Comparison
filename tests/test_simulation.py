@@ -8,8 +8,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools" / "MazesTest"))
 from maze_document import MapLibrary, MazeDocument, default_goals, generate  # noqa: E402
-from simulation import (Direction, Maze, Runner, discover_strategies,  # noqa: E402
-                        load_strategy, maze_walls)
+from simulation import (EXPLORE, KNOWN_MAP, Direction, Maze, Runner,  # noqa: E402
+                        discover_algorithms, load_algorithm, maze_walls)
 
 MAZE = ROOT / "mazes" / "external_uk2011f.json"
 
@@ -33,20 +33,52 @@ class Scripted:
 
 
 class RunnerTests(unittest.TestCase):
-    def test_discovers_src_strategies(self):
-        """自动发现 src/ 中的策略，并支持两种名称写法。"""
-        strategies, errors = discover_strategies()
+    def test_discovers_src_algorithms_by_mode(self):
+        """自动发现 src/ 中的算法并按类别区分；接口文件和内部基类不会被当成算法。"""
+        algorithms, errors = discover_algorithms()
         self.assertEqual(errors, [])
-        self.assertTrue({"dfs", "flood_fill"} <= set(strategies))
-        self.assertEqual(load_strategy("flood_fill").name, "flood_fill")
-        self.assertEqual(load_strategy("dfs:DfsStrategy").name, "dfs")
+        modes = {name: info.mode for name, info in algorithms.items()}
+        for name in ("dfs", "flood_fill", "greedy_dfs", "random_walk", "repeated_astar",
+                     "wall_follower_left", "wall_follower_right"):
+            self.assertEqual(modes[name], EXPLORE)
+        self.assertEqual((modes["bfs"], modes["astar"]), (KNOWN_MAP, KNOWN_MAP))
+        self.assertNotIn("", modes)  # 沿墙法的内部基类 _WallFollower
+        self.assertEqual(set(discover_algorithms(mode=KNOWN_MAP)[0]), {"astar", "bfs"})
+        self.assertEqual(load_algorithm("flood_fill").name, "flood_fill")
+        self.assertEqual(load_algorithm("dfs:DfsStrategy").name, "dfs")
         with self.assertRaises(ValueError):
-            load_strategy("no_such_strategy")
+            load_algorithm("no_such_strategy")
+
+    def test_known_map_runner(self):
+        """已知地图规划器：开始即知道全部墙，规划耗时计入计算时间，逐格执行与路径一致。"""
+        maze = Maze.from_json(MAZE)
+        runner = Runner(maze, load_algorithm("bfs"))
+        first = runner.snapshot()
+        self.assertEqual(runner.mode, KNOWN_MAP)
+        self.assertEqual(first.observed_walls, maze_walls(maze))
+        self.assertGreater(first.stats["expanded_nodes"], 0)
+        planned = [tuple(c) for c in first.debug["plan"]]
+        snap = runner.run()
+        self.assertEqual(snap.status, "success")
+        self.assertEqual(list(snap.path[1:]), planned)
+        self.assertFalse(any(runner.step().replanned for _ in range(3)))
+
+    def test_invalid_plan_is_an_error(self):
+        """规划器返回不从起点出发或不相邻的路径时，记为 error 而不是悄悄执行。"""
+        class BadPlanner:
+            name, mode = "bad", KNOWN_MAP
+
+            def plan(self, maze):
+                """返回一条跳格的非法路径。"""
+                return [maze.start, (5, 5)]
+        runner = Runner(Maze.from_json(MAZE), BadPlanner())
+        self.assertEqual(runner.snapshot().status, "error")
+        self.assertIn("not adjacent", runner.error)
 
     def test_snapshots_match_environment(self):
         """快照中的路径、统计与环境一致；观测到的墙都是真实存在的墙。"""
         maze = Maze.from_json(MAZE)
-        runner = Runner(maze, load_strategy("flood_fill"))
+        runner = Runner(maze, load_algorithm("flood_fill"))
         seen, replans = set(runner.snapshot().observed_walls), 0
         while not runner.finished:
             snap = runner.step()
@@ -63,7 +95,7 @@ class RunnerTests(unittest.TestCase):
 
     def test_reset_restarts_from_start(self):
         """reset 后从起点重新开始，并能得到相同结果。"""
-        runner = Runner(Maze.from_json(MAZE), load_strategy("dfs"))
+        runner = Runner(Maze.from_json(MAZE), load_algorithm("dfs"))
         first = runner.run().stats
         runner.reset()
         self.assertEqual(runner.snapshot().path, (runner.maze.start,))
@@ -83,9 +115,9 @@ class RunnerTests(unittest.TestCase):
     def test_budget_and_timeout(self):
         """移动预算用完记为 budget_exceeded；计算超时记为 timeout。"""
         maze = Maze.from_json(MAZE)
-        self.assertEqual(Runner(maze, load_strategy("dfs"), max_steps=5).run().status,
+        self.assertEqual(Runner(maze, load_algorithm("dfs"), max_steps=5).run().status,
                          "budget_exceeded")
-        self.assertEqual(Runner(maze, load_strategy("dfs"), time_budget=0).run().status,
+        self.assertEqual(Runner(maze, load_algorithm("dfs"), time_budget=0).run().status,
                          "timeout")
 
 

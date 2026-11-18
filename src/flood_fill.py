@@ -14,11 +14,7 @@
 
 from collections import deque
 
-from environment import Cell, Direction, Observation
-
-_DELTAS = {Direction.NORTH: (0, 1), Direction.EAST: (1, 0),
-           Direction.SOUTH: (0, -1), Direction.WEST: (-1, 0)}
-_ORDER = tuple(Direction)
+from algorithm_api import DELTAS, ORDER, Cell, Direction, Observation
 
 
 class FloodFillStrategy:
@@ -43,8 +39,8 @@ class FloodFillStrategy:
     def _open_neighbours(self, cell: Cell):
         """按方向顺序生成 (方向, 邻格)：邻格在迷宫内，且两格之间没有已知墙。"""
         x, y = cell
-        for direction in _ORDER:
-            dx, dy = _DELTAS[direction]
+        for direction in ORDER:
+            dx, dy = DELTAS[direction]
             neighbour = (x + dx, y + dy)
             if self._inside(neighbour) and frozenset((cell, neighbour)) not in self._walls:
                 yield direction, neighbour
@@ -67,7 +63,7 @@ class FloodFillStrategy:
         Returns:
             (方向, 邻格)；没有可到达目标的邻格时返回 None。
         """
-        options = [(self._distance[n], n in self._visited, d != heading, _ORDER.index(d), d, n)
+        options = [(self._distance[n], n in self._visited, d != heading, ORDER.index(d), d, n)
                    for d, n in self._open_neighbours(cell) if n in self._distance]
         if not options:
             return None
@@ -80,7 +76,7 @@ class FloodFillStrategy:
         self._visited.add(here)
         x, y = here
         for direction in observation.walls:
-            dx, dy = _DELTAS[direction]
+            dx, dy = DELTAS[direction]
             if self._inside((x + dx, y + dy)):
                 self._walls.add(frozenset((here, (x + dx, y + dy))))
 

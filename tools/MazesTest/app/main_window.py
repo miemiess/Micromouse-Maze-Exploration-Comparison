@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (QComboBox, QFileDialog, QLabel, QMainWindow, QMes
                                QTabWidget, QToolBar)
 
 from maze_document import MapLibrary, MazeDocument, generate
-from simulation import ROOT, discover_strategies
+from simulation import EXPLORE, KNOWN_MAP, ROOT, discover_algorithms
 
 from .tabs import CompareTab, EditorTab, RunTab
 
@@ -32,9 +32,11 @@ HELP_TEXT = """<h3>电脑鼠迷宫探索</h3>
 <li>红色粗线：这一步刚发现的墙；紫色虚线：策略当前打算走的路线；</li>
 <li>Flood-Fill 撞上新墙时路线会改变，事件日志中记录为"路线重新规划"。</li>
 </ul>
-<p><b>同屏对比</b>：勾选 2~4 个算法，在同一张地图上同步推进，表格中成功且步数最少的一行标绿。</p>
+<p><b>同屏对比</b>：勾选 2~4 个探索算法，在同一张地图上同步推进，表格中成功且步数最少的一行标绿。</p>
+<p><b>已知地图规划</b>：BFS 等一开始就拿到完整地图的算法单独成页，作为参照，
+不与探索算法放在同一个对比里（README 规定两类分开比较）。</p>
 <p><b>地图编辑</b>：点击格子边缘加墙/拆墙，切换工具设置起点和目标；可新建、随机生成（记录种子）。</p>
-<p>新算法：在 src/ 中新增实现 Strategy 接口的类，重启应用后自动出现在算法列表中；
+<p>新算法：在 src/ 中新建文件，按 src/algorithm_api.py 的接口写一个类，重启应用后自动出现在对应页面；
 实现可选的 debug_view() 即可显示距离、路线等内部状态（格式见 tools/MazesTest/README.md）。</p>"""
 
 
@@ -42,7 +44,7 @@ class MainWindow(QMainWindow):
     """应用主窗口。"""
 
     def __init__(self, initial: Path | None = None, *, map_dir: Path = MAZE_DIR):
-        """发现策略、创建三个功能页，并打开初始地图。
+        """发现算法、创建四个功能页，并打开初始地图。
 
         Args:
             initial: 启动时打开的迷宫文件；None 时打开 地图库中的第一张，没有则随机生成一张。
@@ -50,12 +52,15 @@ class MainWindow(QMainWindow):
         """
         super().__init__()
         self.library = MapLibrary(map_dir)
-        self.strategies, errors = discover_strategies()
+        self.algorithms, errors = discover_algorithms()
+        explorers = {n: i for n, i in self.algorithms.items() if i.mode == EXPLORE}
+        planners = {n: i for n, i in self.algorithms.items() if i.mode == KNOWN_MAP}
         self.document: MazeDocument | None = None
         self._synced = None  # 上次交给运行页的 (文档 id, 修改版本)
 
-        self.run_tab = RunTab(self.strategies)
-        self.compare_tab = CompareTab(self.strategies)
+        self.run_tab = RunTab(explorers)
+        self.compare_tab = CompareTab(explorers)
+        self.known_tab = RunTab(planners, known_map=True)
         self.editor_tab = EditorTab()
         self.editor_tab.confirm_discard = self.confirm_discard
         self.editor_tab.documentEdited.connect(self._update_title)
@@ -66,17 +71,19 @@ class MainWindow(QMainWindow):
         self.tabs = QTabWidget()
         self.tabs.addTab(self.run_tab, "▶ 实时运行")
         self.tabs.addTab(self.compare_tab, "⚖ 同屏对比")
+        self.tabs.addTab(self.known_tab, "◎ 已知地图规划")
         self.tabs.addTab(self.editor_tab, "✎ 地图编辑")
         self.tabs.currentChanged.connect(lambda _index: self._sync_maze())
         self.setCentralWidget(self.tabs)
 
         self._build_toolbar_and_menu()
         if errors:
-            self.statusBar().showMessage("以下策略文件导入失败：" + "；".join(errors))
-        elif not self.strategies:
-            self.statusBar().showMessage("src/ 中没有找到实现 Strategy 接口的算法")
+            self.statusBar().showMessage("以下算法文件导入失败：" + "；".join(errors))
+        elif not self.algorithms:
+            self.statusBar().showMessage("src/ 中没有找到符合 algorithm_api 接口的算法")
         else:
-            self.statusBar().showMessage(f"已加载算法：{', '.join(self.strategies)}")
+            self.statusBar().showMessage(
+                f"探索算法：{', '.join(explorers) or '无'}；已知地图算法：{', '.join(planners) or '无'}")
 
         candidates = self.library.maps()
         if initial is not None:
@@ -185,7 +192,7 @@ class MainWindow(QMainWindow):
             maze, message = None, "当前地图无效，请在“地图编辑”中修正：" + "；".join(errors)
         else:
             maze, message = doc.to_maze(), ""
-        for tab in (self.run_tab, self.compare_tab):
+        for tab in (self.run_tab, self.compare_tab, self.known_tab):
             tab.set_maze(maze, message)
         if warnings:
             self.statusBar().showMessage("地图提醒：" + "；".join(warnings))

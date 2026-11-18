@@ -22,8 +22,9 @@ if HAS_QT:
     from PySide6.QtWidgets import QApplication
     from app.export import export_gif, render_image, tile_images
     from app.main_window import MainWindow
+    from app.tabs import STATUS_TEXT
     from maze_app import main as app_main
-    from simulation import Maze, Runner, discover_strategies, load_strategy
+    from simulation import Maze, Runner, discover_algorithms, load_algorithm
 
 MAZE = ROOT / "mazes" / "external_uk2011f.json"
 
@@ -73,7 +74,7 @@ class AppTests(unittest.TestCase):
         tab.controller.step_once()
         self.assertEqual(tab.stat_labels["steps"].text(), "1")
         tab.controller.run_to_end()
-        expected = Runner(Maze.from_json(MAZE), load_strategy("flood_fill")).run().stats
+        expected = Runner(Maze.from_json(MAZE), load_algorithm("flood_fill")).run().stats
         self.assertEqual(tab.stat_labels["steps"].text(), str(expected["steps"]))
         self.assertIn("路线重新规划", tab.log.toPlainText())
         tab.display.boxes["fog"].setChecked(True)
@@ -95,13 +96,31 @@ class AppTests(unittest.TestCase):
         self.assertEqual(external.read_bytes(), original)
         self.assertEqual(self.window.map_combo.currentText(), "uk2011f_edit")
 
+    def test_known_map_algorithms_are_separated(self):
+        """已知地图算法只出现在"已知地图规划"页；探索页和对比页里没有它们。"""
+        def names(combo):
+            return {combo.itemText(i) for i in range(combo.count())}
+        compare = {self.window.compare_tab.algorithms.item(i).text()
+                   for i in range(self.window.compare_tab.algorithms.count())}
+        self.assertEqual(names(self.window.known_tab.algorithm), {"astar", "bfs"})
+        self.assertFalse({"astar", "bfs"} & (names(self.window.run_tab.algorithm) | compare))
+        self.assertIn("wall_follower_left", names(self.window.run_tab.algorithm))
+
+        tab = self.window.known_tab
+        tab.controller.run_to_end()
+        self.assertEqual(tab.stat_labels["status"].text(), "到达目标")
+        self.assertNotEqual(tab.stat_labels["expanded_nodes"].text(), "-")
+
     def test_compare_tab_runs_all_selected(self):
-        """对比页为每个勾选的算法建立画布，跑完后表格每行都是"到达目标"。"""
+        """对比页为每个勾选的算法建立画布；跑完后每行都已结束，并与直接运行的结果一致。"""
         tab = self.window.compare_tab
         self.assertEqual(len(tab.views), len(tab.selected()))
         tab.controller.run_to_end()
         statuses = [tab.table.item(row, 1).text() for row in range(tab.table.rowCount())]
-        self.assertEqual(statuses, ["到达目标"] * len(tab.selected()))
+        expected = [STATUS_TEXT[Runner(Maze.from_json(MAZE), load_algorithm(n)).run().status]
+                    for n in tab.selected()]
+        self.assertEqual(statuses, expected)
+        self.assertNotIn("运行中", statuses)
 
     def test_editor_changes_reach_run_tab(self):
         """编辑页修改地图后，切到运行页时运行的是修改后的地图。"""
@@ -154,7 +173,7 @@ class ExportTests(unittest.TestCase):
         """GIF 从起点录到结束，帧数受 every 控制。"""
         from PIL import Image
         maze = Maze.from_json(MAZE)
-        info = discover_strategies()[0]["flood_fill"]
+        info = discover_algorithms()[0]["flood_fill"]
         path = export_gif(maze, info.create, self.out / "ff.gif", size=200, every=20)
         decisions = Runner(maze, info.create()).run().decision
         with Image.open(path) as gif:

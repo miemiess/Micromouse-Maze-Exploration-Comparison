@@ -4,8 +4,8 @@
 模块均按此约定接入；需要修改公共字段或计数规则时，先在任务 Issue 中说明影响，
 再同步修改调用方和本文件。
 
-当前只固定未知迷宫探索的公共规则，不代表 `environment.py` 或具体算法已经实现。
-已知完整地图的 BFS、Dijkstra、A* 属于独立实验模式，不直接读取本接口中的未知迷宫状态。
+下文的 Strategy 接口固定未知迷宫探索的公共规则。已知完整地图的 BFS、Dijkstra、A* 属于独立实验模式，
+不直接读取本接口中的未知迷宫状态，其接口见“统一接口文件 algorithm_api.py”一节。
 
 ## 文件职责
 
@@ -14,16 +14,45 @@
 | 文件 | 责任 |
 | --- | --- |
 | `environment.py` | 地图读取与验证、真值墙壁、观测、移动、访问及转向统计 |
-| `dfs.py` | DFS＋实际移动回溯 |
-| `flood_fill.py` | 在线地图、距离传播与动作选择 |
-| `wall_follower.py`（可选） | 左手／右手沿墙策略及循环终止 |
-| `repeated_astar.py`（可选） | 未知地图上的重复规划，不读取真值 |
+| `algorithm_api.py` | **统一接口**：共用方向工具、两类算法接口、自动发现、逐步驱动 `Runner` 与 `run_episode`（已实现） |
+| `dfs.py` | DFS＋实际移动回溯（已实现） |
+| `greedy_dfs.py` | 贪心 DFS：只把 DFS 的邻格顺序改为离目标近的优先，用于消融对比（已实现） |
+| `flood_fill.py` | 在线地图、距离传播与动作选择（已实现） |
+| `repeated_astar.py` | 乐观地图上按需重新规划的 A*，与 Flood-Fill 对比计算量（已实现） |
+| `wall_follower.py` | 左手／右手沿墙策略及循环终止（已实现） |
+| `random_walk.py` | 随机游走，下界基线，使用种子（已实现） |
+| `bfs.py` | 已知地图 BFS 最短路，独立实验模式的参照（已实现） |
+| `astar.py` | 已知地图 A* 最短路（曼哈顿启发式），并提供通用 `astar_search`（已实现） |
 | `frontier.py`（可选） | 前沿选择与已知通路导航 |
 | `custom_strategy.py`（可选） | 本组自创或改进策略 |
 | `run_experiments.py` | 统一预算、地图输入、批量运行与 CSV 输出 |
 | `plot_results.py` | 读取结果并绘制比较图表 |
 
 实验执行器通过统一策略接口注册算法，不写死算法数量。随机策略必须接收并记录种子。
+
+## 统一接口文件 algorithm_api.py
+
+算法文件**只写算法**；方向工具、算法的发现、运行和统计都由 `algorithm_api.py` 负责。上位机
+（`tools/MazesTest`）、批量实验和测试都调用它，规则只有一份。
+
+**新增算法的步骤**：在 `src/` 中新建一个文件，写一个类，设置唯一的 `name`，按类别实现下面的方法。
+共用工具（`DELTAS`、`OPPOSITE`、`turn_left`、`step_cell` 等）从 `algorithm_api` 导入，不要各自重写。
+不需要修改任何其他文件：上位机重启后自动发现，探索算法出现在“实时运行”和“同屏对比”页，
+已知地图算法出现在“已知地图规划”页。类名以下划线开头的内部基类不会被发现。
+
+| 类别 | `mode` | 必须实现 | 可选实现 | 能看到什么 |
+| --- | --- | --- | --- | --- |
+| 未知地图探索 | `EXPLORE`（默认，可不写） | `reset`、`choose_direction`（即下文的 Strategy 接口，未改变） | `debug_view` | 只有每步的 `Observation` |
+| 已知地图规划 | `KNOWN_MAP` | `plan(maze) -> list[Cell] \| None` | `debug_view`、`stats` | 完整地图（用 `open_neighbours`、`has_wall` 读取） |
+
+**已知地图规划器（新增接口，待组内确认）**：`plan` 返回从起点到目标的格子序列（含起点），无路时返回
+`None`。驱动先检查路径从起点出发且逐格相邻，再交给环境逐格执行，因此步数、转向等统计与探索算法同口径；
+规划耗时计入 `compute_seconds`；`stats()` 返回的额外指标（如 BFS 的 `expanded_nodes`）并入结果。
+两类算法按 README 约定分开比较。
+
+**驱动**：`Runner(maze, algorithm, seed=..., max_steps=..., time_budget=...)` 逐步运行并生成快照，
+供上位机显示；`run_episode(...)` 一次跑完并返回统计字典，`run_experiments.py` 应直接使用它，
+不要另写一套运行规则。两者的计时、预算和终止状态都按下文“调用示例”的规则执行。
 
 ## 坐标、方向与单元格
 

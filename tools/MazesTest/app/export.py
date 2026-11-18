@@ -99,7 +99,7 @@ def export_gif(maze: Maze, make_strategy, path: str | Path, *, seed: int | None 
 
     Args:
         maze: 地图。
-        make_strategy: 无参函数，每次调用返回一个新的策略对象（如 StrategyInfo.create）。
+        make_strategy: 无参函数，每次调用返回一个新的策略对象（如 AlgorithmInfo.create）。
         path: 输出 .gif 路径。
         seed、max_steps: 与运行页设置相同。
         options: 显示选项。

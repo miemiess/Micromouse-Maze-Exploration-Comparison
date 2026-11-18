@@ -19,7 +19,7 @@ from PySide6.QtWidgets import (
     QSlider, QSpinBox, QSplitter, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget)
 
 from maze_document import MazeDocument, generate
-from simulation import ROOT, Direction, Maze, Runner, StrategyInfo
+from simulation import ROOT, AlgorithmInfo, Direction, Maze, Runner
 
 from .export import export_gif, render_image, save_png, snapshot_title, tile_images
 from .maze_view import MazeView, ViewOptions
@@ -42,9 +42,14 @@ STAT_ROWS = [("状态", "status"), ("决策次数", "decisions"), ("移动步数
              ("覆盖率", "coverage"), ("已观测墙", "observed_walls"),
              ("计算时间", "compute_seconds")]
 
+# 已知地图规划器额外显示的统计项（来自规划器的 stats()）。
+KNOWN_MAP_STAT_ROWS = [("扩展节点", "expanded_nodes")]
+
 
 def format_stat(key: str, value) -> str:
-    """把统计值格式化为界面文字。"""
+    """把统计值格式化为界面文字；缺失的指标显示为 "-"。"""
+    if value is None:
+        return "-"
     if key == "status":
         return STATUS_TEXT.get(value, value)
     if key == "coverage":
@@ -297,12 +302,24 @@ def side_panel(*widgets, width: int = 370) -> QScrollArea:
 # ====================================================================== 实时运行
 
 class RunTab(QWidget):
-    """实时运行单个算法，展示算法真实的决策过程。"""
+    """实时运行单个算法，展示算法真实的决策过程。
 
-    def __init__(self, strategies: dict[str, StrategyInfo], parent=None):
-        """创建画布、算法选择、运行控制、显示选项、统计和事件日志。"""
+    同一个页面类用于两类算法：未知地图探索（"实时运行"页）和已知地图规划（"已知地图规划"页）。
+    两类算法按 README 约定分开比较，因此各占一页，不会出现在同一个列表中。
+    """
+
+    def __init__(self, strategies: dict[str, AlgorithmInfo], parent=None, *,
+                 known_map: bool = False):
+        """创建画布、算法选择、运行控制、显示选项、统计和事件日志。
+
+        Args:
+            strategies: 本页可选的算法（只包含一类）。
+            parent: 父控件。
+            known_map: 是否为已知地图规划页（标题、说明和统计项不同）。
+        """
         super().__init__(parent)
         self.strategies = strategies
+        self.known_map = known_map
         self.maze: Maze | None = None
         self.runner: Runner | None = None
         self._pending_walls = frozenset()  # 上一次移动新发现、策略还未处理的墙
@@ -314,13 +331,18 @@ class RunTab(QWidget):
         self.message.setStyleSheet("color:#c0392b")
         self.message.hide()
 
-        algo_box = QGroupBox("算法")
+        algo_box = QGroupBox("已知地图算法" if known_map else "探索算法（未知地图）")
         self.algorithm = QComboBox()
         self.algorithm.addItems(strategies)
         self.algorithm.currentTextChanged.connect(self.rebuild)
         self.description = QLabel(wordWrap=True)
         self.description.setStyleSheet("color:#555")
         algo_layout = QVBoxLayout(algo_box)
+        if known_map:
+            note = QLabel("一开始就拿到完整地图，用作参照；与探索算法分开比较，不进入同屏对比。")
+            note.setWordWrap(True)
+            note.setStyleSheet("color:#d68910")
+            algo_layout.addWidget(note)
         algo_layout.addWidget(self.algorithm)
         algo_layout.addWidget(self.description)
 
@@ -332,7 +354,7 @@ class RunTab(QWidget):
         stats_box = QGroupBox("统计")
         stats_form = QFormLayout(stats_box)
         self.stat_labels = {}
-        for title, key in STAT_ROWS:
+        for title, key in STAT_ROWS + (KNOWN_MAP_STAT_ROWS if known_map else []):
             self.stat_labels[key] = QLabel("-")
             stats_form.addRow(title, self.stat_labels[key])
 
@@ -372,7 +394,7 @@ class RunTab(QWidget):
         """按当前地图、算法、种子和预算新建 Runner。"""
         name = self.algorithm.currentText()
         info = self.strategies.get(name)
-        self.description.setText(f"{info.module}.py · {info.doc}" if info else "src/ 中没有可用的策略")
+        self.description.setText(f"{info.module}.py · {info.doc}" if info else "src/ 中没有这一类算法")
         self.log.clear()
         if self.maze is None or info is None:
             self.runner = None
@@ -429,7 +451,7 @@ class RunTab(QWidget):
         last = batches[0][-1]
         self.view.set_snapshot(last)
         for key, label in self.stat_labels.items():
-            label.setText(format_stat(key, last.stats.get(key, last.status)))
+            label.setText(format_stat(key, last.stats.get(key)))
 
     def _log_events(self, snap) -> None:
         """把"被墙挡住后重新规划"、"试图穿墙"、"运行结束"等事件写入日志。"""
@@ -449,6 +471,8 @@ class RunTab(QWidget):
                 f"覆盖 {stats['coverage']:.0%}")
             if self.runner and self.runner.error:
                 self.log.appendPlainText(self.runner.error)
+            if self.runner and getattr(self.runner.algorithm, "loop_detected", False):
+                self.log.appendPlainText("原因：回到了走过的（位置, 朝向），之后会无限重复，判定陷入循环")
 
 
 # ====================================================================== 同屏对比
@@ -461,7 +485,7 @@ class CompareTab(QWidget):
                ("90° 转向", "turns_90"), ("重复访问", "repeat_visits"),
                ("覆盖率", "coverage"), ("计算时间", "compute_seconds")]
 
-    def __init__(self, strategies: dict[str, StrategyInfo], parent=None):
+    def __init__(self, strategies: dict[str, AlgorithmInfo], parent=None):
         """创建算法勾选列表、运行控制、显示选项、画布网格和统计表。"""
         super().__init__(parent)
         self.strategies = strategies

@@ -129,12 +129,12 @@ Flood-Fill 的距离传播可以用 BFS 实现，因此不把“BFS”和“Floo
 | A1 环境与地图 | 明确地图格式和统一策略接口，整理运行规则 | `src/README.md`：坐标与方向、地图 JSON、Observation、Strategy 接口、运行状态与统计指标；其他模块能据此接入 | 无，优先 | yuchen-1412 / 已完成 |
 | A2 环境与地图 | 实现观测、移动、转向计数、未知地图隔离 | `src/environment.py`（地图验证、观测、移动、统计）；`tests/test_environment.py`、`tests/test_external_integration.py` 验证墙壁一致、移动合法、无真值泄漏 | A1 | yuchen-1412 / 已完成 |
 | A3 环境与地图 | 整理地图、来源与起终点 | `mazes/`：3 张外部 16×16 比赛迷宫（`external_*`，只读）、来源与许可证说明（`mazes/README.md`）、转换脚本 `mazes/convert_external.py`；比赛迷宫含死路、多分支和环路。20 张测试地图与小调试地图待补充（可用上位机随机生成并记录种子） | A1；可先整理来源 | yuchen-1412 / 已完成 |
-| B1 已有算法 | 阅读候选源码，登记要实现的算法与假设 | 报告方法小节；注明来源、规则和复杂度 | 无，可立即开展 | zhouying682 / 进行中 |
+| B1 已有算法 | 阅读候选源码，登记要实现的算法与假设 | [`Docs/algorithm-methods.md`](Docs/algorithm-methods.md)：全部已实现算法的信息假设、方向规则、失败条件、随机性、复杂度与对照关系；Python Flood-Fill 与 PythonRobotics A* 源码阅读记录（版本、许可证、与本组实现的差异）；文献出处待核查。新增算法时在该文档补登记 | 无，可立即开展 | mmy / 已完成 |
 | B2 基线 | 接入 DFS＋实际回溯与 Flood-Fill；可由不同成员分别认领 | `src/dfs.py`（DFS＋实际回溯）、`src/flood_fill.py`（乐观未知边、全量 BFS 重算），均提供可选 `debug_view` 供可视化；`tests/test_strategies.py` 在小地图和 3 张比赛迷宫上验证到达、无路处理、可复现 | A1/A2 | mmy / 已完成 |
-| B3 更多算法 | 按算法分别认领沿墙法、重复 A*、前沿探索、转弯加权 Flood-Fill、增量重算等（见“扩展规划”） | 每算法一个扁平文件；登记信息假设、循环/无路处理与复杂度 | A1/A2；可先调研 | zhouying682 / 进行中 |
+| B3 更多算法 | 按算法分别认领沿墙法、重复 A*、前沿探索、转弯加权 Flood-Fill、增量重算等（见“扩展规划”） | 每算法一个扁平文件，按 `src/algorithm_api.py` 接口编写；登记信息假设、循环/无路处理与复杂度。已完成（测试见 `tests/test_strategies.py`）：沿墙法 `src/wall_follower.py`（左手 / 右手，按（位置, 朝向）重复判定循环）、随机游走 `src/random_walk.py`（下界基线）、贪心 DFS `src/greedy_dfs.py`（只改邻格顺序的消融对照）、重复 A* `src/repeated_astar.py`（与 Flood-Fill 同样乐观，按需重新规划）；前沿探索、转弯加权、增量重算等待认领 | A1/A2；可先调研 | 沿墙法、随机游走、贪心 DFS、重复 A*：mmy / 已完成；其余：待认领 |
 | C1 自主设计 | 提出自创／改进策略，调研与已有方法的关系（候选：死路剪枝、结构先验、加权评分＋元启发式调参） | `Docs/algorithm-design.md`；动机、伪代码、规则、预期取舍 | 无，可立即开展 | 待认领 / 未开始 |
 | C2 创新实现 | 实现新策略并补充基线对比与消融 | 如 `src/custom_strategy.py`；使用开发集调参，测试前冻结配置 | C1/A1/A2；基线用于评估 | 待认领 / 未开始 |
-| C3 已知地图（可选） | 比较 BFS/Dijkstra/A* 等 | 独立实验组，统一完整地图与代价，不与探索榜混排 | A1/A2 | 待认领 / 未开始 |
+| C3 已知地图（可选） | 比较 BFS/Dijkstra/A* 等 | 独立实验组，统一完整地图与代价，不与探索榜混排。已完成 BFS `src/bfs.py` 与 A* `src/astar.py`（`KNOWN_MAP` 接口，均报告扩展节点数），上位机“已知地图规划”页单独展示。基础规则下每步代价为 1，BFS、Dijkstra、A* 的最短路长度必然相同，只比较扩展节点数，因此基础规则下不单独实现 Dijkstra；带转弯代价的 Dijkstra 归入“扩展规划”中的转弯加权方向 | A1/A2 | mmy / 已完成（基础规则） |
 | D1 实验与报告 | 定义指标、CSV 字段、统一预算和场景清单 | `Docs/experiment-plan.md`；实验前写清，不按结果改规则 | 无，可立即开展 | 待认领 / 未开始 |
 | D2 实验与报告 | 批量执行、生成原始数据与图表 | `src/run_experiments.py`、`src/plot_results.py`、`results/` | A2/已选算法/D1 | 待认领 / 未开始 |
 | D3 实验与报告 | 完成仿真演示与运行说明 | 可运行命令、代表性探索演示，验证计时不含动画；可直接使用 `tools/MazesTest` 上位机（实时运行、同屏对比、PNG/GIF 导出） | A2/已选算法 | 待认领 / 未开始 |

@@ -17,7 +17,7 @@ from pathlib import Path
 
 from PySide6.QtWidgets import QApplication
 
-from simulation import ROOT, Maze, Runner, discover_strategies
+from simulation import ROOT, Maze, Runner, discover_algorithms
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -60,7 +60,7 @@ def batch_export(args) -> int:
         sys.exit("--gif requires --strategy")
     info = None
     if args.strategy:
-        strategies, _ = discover_strategies()
+        strategies, _ = discover_algorithms()
         if args.strategy not in strategies:
             sys.exit(f"unknown strategy {args.strategy!r}; available: {', '.join(strategies)}")
         info = strategies[args.strategy]

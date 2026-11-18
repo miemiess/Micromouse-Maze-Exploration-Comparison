@@ -10,12 +10,7 @@
 随机性：无，seed 参数被忽略。
 """
 
-from environment import Cell, Direction, Observation
-
-_DELTAS = {Direction.NORTH: (0, 1), Direction.EAST: (1, 0),
-           Direction.SOUTH: (0, -1), Direction.WEST: (-1, 0)}
-_OPPOSITE = {Direction.NORTH: Direction.SOUTH, Direction.SOUTH: Direction.NORTH,
-             Direction.EAST: Direction.WEST, Direction.WEST: Direction.EAST}
+from algorithm_api import DELTAS, OPPOSITE, Cell, Direction, Observation
 
 
 class DfsStrategy:
@@ -35,6 +30,7 @@ class DfsStrategy:
               initial_heading: Direction, seed: int | None = None) -> None:
         """清空上一轮的访问记录和回溯栈，参数含义见 src/README.md 的 Strategy 接口。"""
         self._size = (width, height)
+        self._goals = frozenset(goals)
         self._visited: set[Cell] = set()
         self._stack: list[Direction] = []      # 从起点到当前格的前进方向序列
         self._branch: list[Cell] = [start]     # 与栈对应的格子序列，仅用于显示
@@ -45,6 +41,10 @@ class DfsStrategy:
         """判断格子是否在迷宫范围内。"""
         return 0 <= cell[0] < self._size[0] and 0 <= cell[1] < self._size[1]
 
+    def _candidates(self, here: Cell, heading: Direction) -> tuple[Direction, ...]:
+        """选择未访问邻格时的尝试顺序；基础 DFS 使用固定顺序，子类可改写（如贪心 DFS）。"""
+        return self.order
+
     def choose_direction(self, observation: Observation) -> Direction | None:
         """根据当前观测返回下一步方向；所有可达格都已访问时返回 None。"""
         x, y = here = observation.position
@@ -52,12 +52,12 @@ class DfsStrategy:
             self._visited.add(here)
             self._order_seen[here] = len(self._order_seen)
         for direction in observation.walls:
-            dx, dy = _DELTAS[direction]
+            dx, dy = DELTAS[direction]
             if self._inside((x + dx, y + dy)):
                 self._walls.add(frozenset((here, (x + dx, y + dy))))
 
-        for direction in self.order:
-            dx, dy = _DELTAS[direction]
+        for direction in self._candidates(here, observation.heading):
+            dx, dy = DELTAS[direction]
             neighbour = (x + dx, y + dy)
             if direction not in observation.walls and neighbour not in self._visited:
                 self._stack.append(direction)
@@ -67,7 +67,7 @@ class DfsStrategy:
         if not self._stack:
             return None
         self._branch.pop()
-        return _OPPOSITE[self._stack.pop()]
+        return OPPOSITE[self._stack.pop()]
 
     def debug_view(self) -> dict:
         """供可视化工具显示：已知墙、首次访问顺序，并用底色标出当前分支（回溯栈对应的格子）。"""
