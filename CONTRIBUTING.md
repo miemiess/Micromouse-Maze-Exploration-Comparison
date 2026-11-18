@@ -47,7 +47,7 @@ git push origin main
 git status
 ```
 
-提交前确认没有密码、令牌、缓存、虚拟环境或无关文件。文档放到 `Docs/`；地图放 `mazes/`，数据和图表放 `results/`。README 任务状态更新也需要明确暂存和提交。完成后到 GitHub 页面检查文件和提交记录。
+提交前确认没有密码、令牌、缓存、虚拟环境或无关文件。文档放到 `Docs/`；地图放 `tools/MazesTest/MAP/`，数据和图表放 `results/`。README 任务状态更新也需要明确暂存和提交。完成后到 GitHub 页面检查文件和提交记录。
 
 ## 4. 推送被拒绝怎么办
 

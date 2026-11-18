@@ -1,0 +1,12 @@
+开发日志（格式：开发者 日期 开发内容简述）
+
+Luca 2026-11-16 初始化协作仓库：README（任务分工、实验要求）、CONTRIBUTING、目录说明、Git 配置，上传 brief 与 proposal
+Luca 2026-11-16 扩展为多算法比较并支持自主设计算法，更新分工、proposal 及 Issue 提交说明
+Yuchen Han 2026-11-17 认领 A1/A2/A3，在 src/README.md 补充环境与策略接口约定
+Yuchen Han 2026-11-17 实现 src/environment.py，转换 3 张外部 16x16 比赛迷宫，添加环境与集成测试
+Luca 2026-11-18 认领 B2，实现 src/dfs.py（DFS + 实际回溯）和 src/flood_fill.py（Flood-Fill 探索）
+Luca 2026-11-18 新增 tools/MazesTest 可视化上位机（PySide6）：实时运行、多算法对比、地图编辑与随机生成、PNG/GIF 导出
+Luca 2026-11-18 environment.py 补充函数注释，requirements.txt 加入 PySide6，添加策略/运行核心/应用测试
+Luca 2026-11-18 上位机新增 tools/MazesTest/MAP 地图库：下拉框选择、导入（验证合法性）、导出
+Luca 2026-11-18 mazes/ 并入上位机：地图移至 tools/MazesTest/MAP，转换脚本移至 tools/MazesTest，更新引用路径与测试
+Luca 2026-11-18 README 任务表交付说明对齐当前内容（A1-A3、B2 标记完成、D3）；Flood-Fill 同距离时补充优先未访问格，对齐基础实验约定

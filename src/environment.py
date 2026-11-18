@@ -44,6 +44,14 @@ class Maze:
     """保存完整迷宫；未知地图策略只应接收 Observation，不应读取此对象。"""
 
     def __init__(self, data: dict):
+        """根据 JSON 数据构建并验证迷宫。
+
+        Args:
+            data: 符合 src/README.md 约定的迷宫字典。
+
+        Raises:
+            ValueError: 字段缺失、类型错误、坐标越界或墙壁不合法。
+        """
         if not isinstance(data, dict):
             raise ValueError("maze must be a JSON object")
         self.maze_id = data.get("maze_id")
@@ -56,6 +64,11 @@ class Maze:
 
         # 统一验证坐标的类型和范围，并转换为不可变元组。
         def cell(value):
+            """将 [x, y] 验证并转换为 (x, y)。
+
+            Raises:
+                ValueError: 不是两个整数或超出迷宫范围。
+            """
             if (not isinstance(value, (list, tuple)) or len(value) != 2
                     or any(type(n) is not int for n in value)):
                 raise ValueError("cell must contain two integers")
@@ -95,7 +108,14 @@ class Maze:
 
     @classmethod
     def from_json(cls, path):
-        """从 JSON 文件读取地图，并通过构造函数验证内容。"""
+        """从 JSON 文件读取地图，并通过构造函数验证内容。
+
+        Args:
+            path: 迷宫 JSON 文件路径。
+
+        Returns:
+            验证通过的 Maze 对象。
+        """
         with Path(path).open(encoding="utf-8") as file:
             return cls(json.load(file))
 
@@ -104,6 +124,16 @@ class MazeEnvironment:
     """管理电脑鼠的位置、观测、移动和本次运行的统计。"""
 
     def __init__(self, maze: Maze, max_steps: int | None = None):
+        """创建环境并回到起点。
+
+        Args:
+            maze: 真值迷宫，只由环境持有。
+            max_steps: 移动预算；None 时为 20 × 格子数。
+
+        Raises:
+            TypeError: maze 不是 Maze。
+            ValueError: max_steps 不是正整数。
+        """
         if not isinstance(maze, Maze):
             raise TypeError("maze must be a Maze")
         if max_steps is None:
@@ -116,7 +146,11 @@ class MazeEnvironment:
         self.reset()
 
     def reset(self):
-        """回到起点并清空统计，返回初始观测。"""
+        """回到起点并清空统计。
+
+        Returns:
+            起点处的 Observation。
+        """
         self.position = self._maze.start
         self.heading = self._maze.start_heading
         self.steps = self.repeat_visits = self.turns_90 = 0
@@ -127,7 +161,11 @@ class MazeEnvironment:
         return self.observe()
 
     def observe(self):
-        """只返回当前位置四个方向的墙，不返回完整地图。"""
+        """只返回当前位置四个方向的墙，不返回完整地图。
+
+        Returns:
+            当前格的 Observation；边界也算作墙。
+        """
         walls = set()
         x, y = self.position
         for direction, (dx, dy) in _DELTAS.items():
@@ -140,7 +178,17 @@ class MazeEnvironment:
         return Observation(self.position, self.heading, frozenset(walls), self.steps)
 
     def step(self, direction):
-        """尝试沿绝对方向移动一格，更新统计并返回结果。"""
+        """尝试沿绝对方向移动一格，并更新统计。
+
+        Args:
+            direction: 目标绝对方向。
+
+        Returns:
+            StepResult；非法方向或穿墙时 moved 为 False，状态为 invalid_action。
+
+        Raises:
+            RuntimeError: 运行已经结束。
+        """
         if self.status != "running":
             raise RuntimeError("cannot step after the run has ended")
         if not isinstance(direction, Direction) or direction in self.observe().walls:
@@ -166,7 +214,15 @@ class MazeEnvironment:
         return StepResult(self.observe(), self.status, True)
 
     def finish(self, status):
-        """由外部执行器记录无路、超时或异常等结束状态。"""
+        """由外部执行器记录无路、超时或异常等结束状态。
+
+        Args:
+            status: "no_path"、"timeout" 或 "error"。
+
+        Raises:
+            RuntimeError: 运行已经结束。
+            ValueError: status 不在允许范围内。
+        """
         if self.status != "running":
             raise RuntimeError("run has already ended")
         if status not in {"no_path", "timeout", "error"}:
@@ -174,7 +230,15 @@ class MazeEnvironment:
         self.status = status
 
     def summary(self, *, compute_seconds=0.0, peak_memory_bytes=None):
-        """返回本次运行指标；计算时间和内存由外部执行器测量。"""
+        """返回本次运行指标；计算时间和内存由外部执行器测量。
+
+        Args:
+            compute_seconds: 策略累计计算时间（秒）。
+            peak_memory_bytes: 峰值内存（字节），未测量时为 None。
+
+        Returns:
+            包含状态、步数、重复访问、转向、耗时、路径和内存的字典。
+        """
         return {"status": self.status, "steps": self.steps,
                 "repeat_visits": self.repeat_visits, "turns_90": self.turns_90,
                 "compute_seconds": compute_seconds, "path": list(self.path),
