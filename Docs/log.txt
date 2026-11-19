@@ -14,3 +14,4 @@ Luca 2026-11-18 README 新增“扩展规划”：分层结构（决策/感知/�
 Luca 2026-11-18 新增 src/algorithm_api.py 统一接口（共用工具、探索/已知地图两类接口、自动发现、Runner/run_episode 驱动）；实现 wall_follower.py（B3）与 bfs.py（C3）；上位机新增“已知地图规划”页
 Luca 2026-11-18 新增 random_walk.py、greedy_dfs.py、repeated_astar.py（B3）与 astar.py（C3）；dfs.py 增加邻格顺序钩子供贪心 DFS 复用
 Luca 2026-11-18 完成 B1：Docs/algorithm-methods.md 登记全部算法的假设、规则、复杂度与对照关系，记录 Flood-Fill 与 PythonRobotics A* 源码阅读；C3 按基础规则标记完成
+Luca 2026-11-19 新增 Docs/Result.md 初稿（问题建模、算法对比与选择理由、启发式与近似算法、新方案）；新增 results/preliminary 初步实验脚本与数据，按照Projectbrief里教授要求的分的章节，分的有点丑但是先丰富内容再美化格式把。

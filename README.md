@@ -202,7 +202,7 @@ results/          原始 CSV、统计图及运行元数据
 
 ## 本地准备
 
-推荐 Python 3.11 或 3.12。安装 Git，克隆后进入仓库；完整协作步骤见 [CONTRIBUTING.md](CONTRIBUTING.md)。
+需要 Python 3.10 及以上（代码使用了 `int | None` 等 3.10 起支持的写法）。当前开发、测试和初步实验使用 **Python 3.14.7**；正式实验前全组统一为同一版本，并在结果中记录。安装 Git，克隆后进入仓库；完整协作步骤见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 ```bash
 python -m venv .venv
