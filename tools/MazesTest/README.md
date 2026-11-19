@@ -45,7 +45,17 @@ python tools/MazesTest/maze_app.py mazes/classic/external_uk2011f.json
 - "检查"区域显示地图是否有效、目标是否可达。目标不可达的地图仍可保存，用于无路测试。
 - "保存到地图库"、"导出…"的规则同上。保存的文件就是项目 JSON 格式，可以直接用于实验。外部比赛迷宫受只读保护；自己的地图修改后会原地覆盖，正式实验前请在结果中记录所用地图文件和提交号。编辑后切到运行页或对比页，会自动用新地图重新开始。
 
+**批量实验**：勾选多张地图（筛选框，以及“比赛迷宫 / 生成迷宫 / 核心 3 张”快捷按钮）和多个算法，设置种子、重复次数、预算，点“运行并导出”。不显示动画，分批运行、界面保持响应，可随时停止（已完成部分照常导出）。结果写入 `results/batch-<时间>/`：`runs.csv`、`summary.csv`、`summary.md`、`metadata.json`、`figures/`，并在页面下方显示汇总表。运行与导出调用 `src/run_experiments.py`，与命令行完全一致；正式实验规则见 `Docs/experiment-plan.md`。
+
 **新算法**：在 `src/` 中新建文件，按 `src/algorithm_api.py` 的接口写一个类（说明见 `src/README.md`“统一接口文件”一节），重启应用后会按类别自动出现在对应页面，不需要改动上位机。
+
+## 命令行：批量生成地图
+
+```
+python tools/MazesTest/maze_app.py --generate backtracker wilson prim kruskal --loops 0 10 30 --seeds 1 10
+```
+
+按 生成算法 × 环路比例（百分比）× 种子范围 生成地图并存入地图库（紧凑 JSON，同名跳过）；`--maze-size W H` 指定尺寸（默认 16 16）。实验计划的 120 张生成地图就是这条命令生成的。
 
 ## 命令行批量导出
 
@@ -87,6 +97,7 @@ def debug_view(self) -> dict:
 | `app/tabs.py` | 三个功能页，以及共用的运行控制器、控制面板、显示选项 |
 | `app/main_window.py` | 主窗口：地图下拉框、导入 / 导出 / 保存、菜单、未保存修改提示，并在功能页之间同步地图 |
 | `app/export.py` | 把画布渲染为 PNG / GIF，以及对比图拼接 |
+| `app/batch_tab.py` | 批量实验页：选择地图与算法、分批运行、导出结果（调用 `src/run_experiments.py`） |
 | `maze_app.py` | 启动入口和命令行批量导出 |
 
 ## 说明

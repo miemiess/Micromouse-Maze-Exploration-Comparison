@@ -153,7 +153,7 @@ class KnownMapPlanner(Protocol):
 # ====================================================================== 3. 自动发现
 
 # src/ 中不是算法的模块，发现时跳过。
-_NOT_ALGORITHMS = {"environment", "algorithm_api", "run_experiments", "plot_results"}
+_NOT_ALGORITHMS = {"environment", "algorithm_api", "run_experiments"}
 
 
 @dataclass(frozen=True)

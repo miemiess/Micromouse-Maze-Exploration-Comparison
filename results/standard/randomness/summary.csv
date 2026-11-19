@@ -1,0 +1,3 @@
+map_group,algorithm,experiment_mode,runs,success,success_rate,mean_steps,mean_ratio,median_ratio,max_ratio,mean_turns,mean_repeat_visits,mean_coverage,median_compute_ms,mean_expanded_nodes
+competition,random_walk,unknown_exploration,30,6,0.2,3684.333,46.223,49.056,64.2113,4605.167,3517,0.527,7.623,
+ALL,random_walk,unknown_exploration,30,6,0.2,3684.333,46.223,49.056,64.2113,4605.167,3517,0.527,7.623,

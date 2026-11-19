@@ -8,6 +8,9 @@
     python tools/MazesTest/maze_app.py --export "mazes/classic/*.json"                       # 每张地图一张 PNG
     python tools/MazesTest/maze_app.py --export "mazes/classic/*.json" --strategy flood_fill  # 运行到结束后的画面
     python tools/MazesTest/maze_app.py --export mazes/classic/external_uk2011f.json --strategy dfs --gif
+
+批量生成地图到地图库 mazes/classic/（同名文件跳过；实验计划的生成地图集即由此产生）：
+    python tools/MazesTest/maze_app.py --generate backtracker wilson prim kruskal --loops 0 10 30 --seeds 1 10
 """
 
 import argparse
@@ -34,7 +37,37 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--seed", type=int, default=None, help="传给策略的随机种子")
     parser.add_argument("--gif", action="store_true", help="同时导出完整过程 GIF（需要 --strategy）")
     parser.add_argument("--size", type=int, default=900, help="PNG 宽度（像素）")
+    parser.add_argument("--generate", nargs="+", metavar="ALGORITHM",
+                        help="批量生成地图：生成算法（backtracker / wilson / prim / kruskal）")
+    parser.add_argument("--loops", nargs="+", type=int, default=[0], help="环路比例（百分比），可多个")
+    parser.add_argument("--seeds", nargs=2, type=int, default=[1, 10], metavar=("FIRST", "LAST"),
+                        help="种子范围（含两端），默认 1 10")
+    parser.add_argument("--maze-size", nargs=2, type=int, default=[16, 16], metavar=("W", "H"),
+                        help="生成地图的宽和高，默认 16 16")
     return parser
+
+
+def batch_generate(args) -> int:
+    """按 生成算法 × 环路比例 × 种子 批量生成地图，存入地图库；打印写入与跳过的数量。"""
+    from app.main_window import MAZE_DIR
+    from maze_document import GENERATORS, MapLibrary, generate
+
+    unknown = [g for g in args.generate if g not in GENERATORS]
+    if unknown:
+        sys.exit(f"unknown generator {unknown}; available: {', '.join(GENERATORS)}")
+    library = MapLibrary(MAZE_DIR)
+    width, height = args.maze_size
+    written = skipped = 0
+    for algorithm in args.generate:
+        for loop in args.loops:
+            for seed in range(args.seeds[0], args.seeds[1] + 1):
+                doc = generate(width, height, seed=seed, loop_fraction=loop / 100, algorithm=algorithm)
+                if library.save_generated(doc):
+                    written += 1
+                else:
+                    skipped += 1
+    print(f"generated {written}, skipped {skipped} existing -> {MAZE_DIR}")
+    return 0
 
 
 def expand_paths(patterns: list[str]) -> list[Path]:
@@ -88,6 +121,8 @@ def main(argv: list[str] | None = None) -> int:
     app = QApplication.instance() or QApplication(sys.argv[:1])
     if args.export:
         return batch_export(args)
+    if args.generate:
+        return batch_generate(args)
 
     from app.main_window import MainWindow
     app.setApplicationName("Micromouse Maze Explorer")

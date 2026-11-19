@@ -1,4 +1,4 @@
 # 环境与算法（src/）只使用 Python 标准库；以下依赖用于可视化与结果绘图。
 # 首次正式实验时在 results 中记录实际版本；MMS 是单独安装的程序。
 PySide6      # 桌面应用与图片导出（tools/MazesTest/maze_app.py）
-matplotlib   # 实验结果统计图（src/plot_results.py）；附带的 Pillow 用于导出 GIF
+matplotlib   # 实验结果统计图（src/run_experiments.py）；附带的 Pillow 用于导出 GIF

@@ -1,0 +1,31 @@
+{
+  "experiment": "main",
+  "started": "2026-11-19T16:03:17",
+  "finished": "2026-11-19T16:12:05",
+  "git_commit": "26c3624+dirty",
+  "python": "3.14.7",
+  "platform": "Windows-11-10.0.26200-SP0",
+  "processor": "Intel64 Family 6 Model 183 Stepping 1, GenuineIntel",
+  "maps": 514,
+  "algorithms": [
+    "astar",
+    "bfs",
+    "dfs",
+    "flood_fill",
+    "greedy_dfs",
+    "random_walk",
+    "repeated_astar",
+    "wall_follower_left",
+    "wall_follower_right"
+  ],
+  "seeds": [
+    0
+  ],
+  "repeats": 3,
+  "max_steps": "20 × 格子数",
+  "time_budget_seconds": 30.0,
+  "measure_memory": false,
+  "timing_scope": "只含算法 reset / plan / choose_direction；不含读图、环境检查、绘图与写盘",
+  "runs": 4626,
+  "note": "运行时 D1–D3 的代码（run_experiments.py、计划生成地图等）尚未提交；对应代码见紧随 26c3624 之后的 D1–D3 提交"
+}

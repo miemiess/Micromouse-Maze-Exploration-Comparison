@@ -107,8 +107,12 @@ class MazeDocument:
         """
         return Maze(self.to_dict())
 
-    def export(self, path: str | Path) -> Path:
+    def export(self, path: str | Path, *, compact: bool = False) -> Path:
         """验证后写出一份 JSON 副本；不改变本文档对应的文件和"未保存"状态。
+
+        Args:
+            path: 目标文件。
+            compact: 为 True 时写成单行紧凑 JSON（批量生成用，体积约为缩进格式的 1/6）。
 
         Raises:
             ValueError: 地图不合法时不写文件。
@@ -116,17 +120,18 @@ class MazeDocument:
         self.to_maze()
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(self.to_dict(), ensure_ascii=False, indent=2) + "\n",
-                        encoding="utf-8")
+        text = (json.dumps(self.to_dict(), ensure_ascii=False, separators=(",", ":")) if compact
+                else json.dumps(self.to_dict(), ensure_ascii=False, indent=2))
+        path.write_text(text + "\n", encoding="utf-8")
         return path
 
-    def save(self, path: str | Path) -> Path:
+    def save(self, path: str | Path, *, compact: bool = False) -> Path:
         """验证后保存为 JSON，并把本文档对应的文件更新为 path。
 
         Raises:
             ValueError: 地图不合法时不写文件。
         """
-        path = self.export(path)
+        path = self.export(path, compact=compact)
         self.path, self.dirty = path, False
         return path
 
@@ -325,7 +330,7 @@ class MapLibrary:
         target = self.path_for(doc.maze_id)
         if target.exists():
             return None
-        return doc.save(target)
+        return doc.save(target, compact=True)
 
     def import_file(self, path: str | Path, *, overwrite: bool = False
                     ) -> tuple[MazeDocument, list[str]]:

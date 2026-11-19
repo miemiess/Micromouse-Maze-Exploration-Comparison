@@ -19,3 +19,6 @@ Luca 2026-11-19 README：B3 标记完成；前沿探索、转弯加权、增量�
 Luca 2026-11-19 Result.md 引用 MicroMouse Maze Library 与 Ariadne，调整“本组提出”措辞；核实发现 6 为生成器偏差；导入 391 张比赛迷宫到 mazes/classic；上位机新增 Wilson/Prim/Kruskal 生成器、批量生成与子文件夹地图库
 Luca 2026-11-19 全部地图（含核心 3 张）统一放入 mazes/classic/，上位机与测试改为读取该目录；地图库保持单一文件夹，批量生成也存入其中
 Luca 2026-11-19 批量导入功能合并进 mazes/convert_external.py（--batch），删除 import_maze_tool.py
+Luca 2026-11-19 完成 D1（Docs/experiment-plan.md）、D2（src/run_experiments.py、src/plot_results.py、上位机批量实验页、120 张计划生成地图、results/standard 正式结果）、D3（Docs/demo-guide.md、results/demo 演示图、计时范围测试）
+Luca 2026-11-19 画图功能合并进 src/run_experiments.py（--plot 从 CSV 重画），删除 plot_results.py
+Luca 2026-11-19 matplotlib 改为必需依赖：run_experiments.py 直接导入，去掉未安装时的兼容分支与测试跳过

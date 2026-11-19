@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (QComboBox, QFileDialog, QLabel, QMainWindow, QMes
 from maze_document import MapLibrary, MazeDocument, generate
 from simulation import EXPLORE, KNOWN_MAP, ROOT, discover_algorithms
 
+from .batch_tab import BatchTab
 from .tabs import CompareTab, EditorTab, RunTab
 
 MAZE_DIR = ROOT / "mazes" / "classic"  # 项目的地图目录：全部地图统一放在这里
@@ -35,6 +36,7 @@ HELP_TEXT = """<h3>电脑鼠迷宫探索</h3>
 <p><b>同屏对比</b>：勾选 2~4 个探索算法，在同一张地图上同步推进，表格中成功且步数最少的一行标绿。</p>
 <p><b>已知地图规划</b>：BFS 等一开始就拿到完整地图的算法单独成页，作为参照，
 不与探索算法放在同一个对比里（README 规定两类分开比较）。</p>
+<p><b>批量实验</b>：勾选多张地图和多个算法，批量运行（不显示动画），自动导出 runs.csv、summary.csv、metadata.json 和图表到 results/；规则见 Docs/experiment-plan.md。</p>
 <p><b>地图编辑</b>：点击格子边缘加墙/拆墙，切换工具设置起点和目标；可新建、随机生成（记录种子）。</p>
 <p>新算法：在 src/ 中新建文件，按 src/algorithm_api.py 的接口写一个类，重启应用后自动出现在对应页面；
 实现可选的 debug_view() 即可显示距离、路线等内部状态（格式见 tools/MazesTest/README.md）。</p>"""
@@ -61,6 +63,7 @@ class MainWindow(QMainWindow):
         self.run_tab = RunTab(explorers)
         self.compare_tab = CompareTab(explorers)
         self.known_tab = RunTab(planners, known_map=True)
+        self.batch_tab = BatchTab(self.library, self.algorithms)
         self.editor_tab = EditorTab()
         self.editor_tab.confirm_discard = self.confirm_discard
         self.editor_tab.documentEdited.connect(self._update_title)
@@ -73,8 +76,9 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.run_tab, "▶ 实时运行")
         self.tabs.addTab(self.compare_tab, "⚖ 同屏对比")
         self.tabs.addTab(self.known_tab, "◎ 已知地图规划")
+        self.tabs.addTab(self.batch_tab, "▦ 批量实验")
         self.tabs.addTab(self.editor_tab, "✎ 地图编辑")
-        self.tabs.currentChanged.connect(lambda _index: self._sync_maze())
+        self.tabs.currentChanged.connect(self._on_tab_changed)
         self.setCentralWidget(self.tabs)
 
         self._build_toolbar_and_menu()
@@ -144,6 +148,14 @@ class MainWindow(QMainWindow):
             index = self.map_combo.count() - 1
         self.map_combo.setCurrentIndex(index)
         self.map_combo.blockSignals(False)
+
+    def _on_tab_changed(self, _index: int) -> None:
+        """切换页面：运行类页面同步当前地图；进入批量实验页时刷新地图列表（地图库可能已变化）。"""
+        if self.tabs.currentWidget() is self.batch_tab:
+            if not self.batch_tab.timer.isActive():
+                self.batch_tab.reload_maps()
+        else:
+            self._sync_maze()
 
     def _update_title(self) -> None:
         """窗口标题显示地图 ID，有未保存修改时加 *。"""

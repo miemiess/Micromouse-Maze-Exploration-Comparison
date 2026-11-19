@@ -14,11 +14,11 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 HAS_QT = importlib.util.find_spec("PySide6") is not None
-HAS_PIL = importlib.util.find_spec("PIL") is not None
 
 if HAS_QT:
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     sys.path.insert(0, str(ROOT / "tools" / "MazesTest"))
+    from PySide6.QtCore import Qt
     from PySide6.QtWidgets import QApplication
     from app.export import export_gif, render_image, tile_images
     from app.main_window import MainWindow
@@ -132,6 +132,29 @@ class AppTests(unittest.TestCase):
         self.window.run_tab.controller.run_to_end()
         self.assertEqual(self.window.run_tab.runner.snapshot().status, "no_path")
 
+    def test_batch_experiment_tab(self):
+        """批量实验页：按类别勾选地图、选择算法、运行并导出结果文件，汇总表显示每个算法一行。"""
+        import shutil
+        for name in ("external_1stworld.json", "external_uk2011f.json"):
+            shutil.copy(ROOT / "mazes" / "classic" / name, self.map_dir / name)
+        from maze_document import generate
+        self.window.library.save_generated(generate(5, 5, seed=1))
+        tab = self.window.batch_tab
+        self.window.tabs.setCurrentWidget(tab)  # 切到本页时刷新地图列表
+        self.assertEqual(tab.maps.count(), 3)
+        tab._check(lambda name: name.startswith("external_"))
+        self.assertEqual(len(tab.selected_maps()), 2)
+        for i in range(tab.algorithms.count()):
+            item = tab.algorithms.item(i)
+            item.setCheckState(Qt.Checked if item.data(Qt.UserRole) in ("dfs", "bfs") else Qt.Unchecked)
+        tab.output.setText(str(Path(self.tmp.name) / "batch"))
+        self.assertTrue(tab.start())
+        tab.run_to_end()
+        out = Path(self.tmp.name) / "batch"
+        self.assertTrue((out / "runs.csv").exists() and (out / "metadata.json").exists())
+        self.assertEqual(tab.table.rowCount(), 2)
+        self.assertIn("完成", tab.status.text())
+
     def test_generate_replaces_document(self):
         """随机生成会替换当前地图并出现在地图下拉框中。"""
         editor = self.window.editor_tab
@@ -184,7 +207,6 @@ class ExportTests(unittest.TestCase):
         sheet = tile_images([plain, plain, plain], 2)
         self.assertEqual((sheet.width(), sheet.height()), (800, plain.height() * 2))
 
-    @unittest.skipUnless(HAS_PIL, "Pillow not installed")
     def test_gif_contains_whole_run(self):
         """GIF 从起点录到结束，帧数受 every 控制。"""
         from PIL import Image
