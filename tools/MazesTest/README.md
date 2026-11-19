@@ -13,17 +13,17 @@ pip install -r requirements.txt
 ## 启动
 
 ```
-python tools/MazesTest/maze_app.py                                  # 打开 mazes/ 中的第一张地图
-python tools/MazesTest/maze_app.py mazes/external_uk2011f.json
+python tools/MazesTest/maze_app.py                                  # 打开 mazes/classic/ 中的第一张地图
+python tools/MazesTest/maze_app.py mazes/classic/external_uk2011f.json
 ```
 
-**地图库**：上位机默认读取项目独立的地图目录 `mazes/`，实验也使用这里，来源说明见 [mazes/README.md](../../mazes/README.md)。工具栏左侧的下拉框列出其中所有地图。
-- **导入地图**（Ctrl+O）：选择任意位置的 JSON 文件，先完整验证再复制进 `mazes/`，保存为 `<地图 ID>.json`。
+**地图库**：上位机默认读取项目的地图目录 `mazes/classic/`（全部地图统一放在这里，共 394 张比赛迷宫），实验也使用这里，来源说明见 [mazes/README.md](../../mazes/README.md)。工具栏左侧的下拉框列出其中所有地图。
+- **导入地图**（Ctrl+O）：选择任意位置的 JSON 文件，先完整验证再复制进 `mazes/classic/`，保存为 `<地图 ID>.json`。
   - 拒绝导入的情况：不是 JSON，或缺字段、类型错误、坐标越界、墙两端不相邻、重复墙、没有目标。会弹窗说明原因。
   - 合法但有提醒的情况（如目标不可达）：询问后可以导入。
   - 地图库中已有同名地图时，会询问是否覆盖。
 - **导出地图**（Ctrl+Shift+S）：把当前地图另存一份到任意位置，不改变当前打开的文件。
-- **保存到地图库**（Ctrl+S）：保存为 `mazes/<地图 ID>.json`。
+- **保存到地图库**（Ctrl+S）：保存为 `mazes/classic/<地图 ID>.json`。
   - 地图 ID 没改：原地保存。改了 ID：另存为新文件，原文件保留。
   - 从地图库外打开的文件：在地图库中另存一份，原文件不变。
   - **外部迷宫只读**：`external_*.json` 是整理好的比赛迷宫，永远不会被覆盖。修改后保存会自动另存为新地图，去掉前缀、加 `_edit` 后缀，重名时依次编号，例如 `external_uk2011f` → `uk2011f_edit`、`uk2011f_edit2`。`metadata.derived_from` 记录原地图，编辑页"来源"一栏显示 🔒 标记。自己的地图不要使用 `external_` 前缀。
@@ -40,7 +40,8 @@ python tools/MazesTest/maze_app.py mazes/external_uk2011f.json
 
 **地图编辑**：
 - 墙工具：点击格子边缘加墙或拆墙。起点 / 目标工具：点击格子设置。
-- 可以新建空白地图，也可以按尺寸、种子、环路比例随机生成。生成器为递归回溯，种子会写入 `metadata`，方便复现。
+- 可以新建空白地图，也可以按尺寸、**生成算法**、种子、环路比例随机生成，参数都会写入 `metadata`，方便复现。生成算法有四种：递归回溯（长走廊、分支少，有偏）、Wilson（均匀随机生成树，无偏）、随机 Prim（分支多、短死胡同多）、随机 Kruskal（短死胡同分布均匀）。只用一种生成器得到的实验结论可能有偏差（见 `Docs/Result.md` 发现 6）。
+- **批量生成到地图库**：按当前参数、从当前种子开始连续生成多张（例如种子 1、数量 10 → 种子 1～10），存入地图库；同名文件跳过，不覆盖。
 - "检查"区域显示地图是否有效、目标是否可达。目标不可达的地图仍可保存，用于无路测试。
 - "保存到地图库"、"导出…"的规则同上。保存的文件就是项目 JSON 格式，可以直接用于实验。外部比赛迷宫受只读保护；自己的地图修改后会原地覆盖，正式实验前请在结果中记录所用地图文件和提交号。编辑后切到运行页或对比页，会自动用新地图重新开始。
 
@@ -51,9 +52,9 @@ python tools/MazesTest/maze_app.py mazes/external_uk2011f.json
 不打开窗口，默认输出到 `results/figures/`：
 
 ```
-python tools/MazesTest/maze_app.py --export "mazes/*.json"                       # 每张地图一张 PNG
-python tools/MazesTest/maze_app.py --export "mazes/*.json" --strategy flood_fill  # 运行到结束后的画面
-python tools/MazesTest/maze_app.py --export mazes/external_uk2011f.json --strategy dfs --gif
+python tools/MazesTest/maze_app.py --export "mazes/classic/*.json"                       # 每张地图一张 PNG
+python tools/MazesTest/maze_app.py --export "mazes/classic/*.json" --strategy flood_fill  # 运行到结束后的画面
+python tools/MazesTest/maze_app.py --export mazes/classic/external_uk2011f.json --strategy dfs --gif
 ```
 
 可选参数：`-o 目录`、`--seed`、`--size 宽度像素`。导出的图片和界面画法完全一致；图片标题使用英文，可以直接放进报告。

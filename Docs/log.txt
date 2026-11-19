@@ -16,3 +16,6 @@ Luca 2026-11-18 新增 random_walk.py、greedy_dfs.py、repeated_astar.py（B3�
 Luca 2026-11-18 完成 B1：Docs/algorithm-methods.md 登记全部算法的假设、规则、复杂度与对照关系，记录 Flood-Fill 与 PythonRobotics A* 源码阅读；C3 按基础规则标记完成
 Luca 2026-11-19 新增 Docs/Result.md 初稿（问题建模、算法对比与选择理由、启发式与近似算法、新方案）；新增 results/preliminary 初步实验脚本与数据，按照Projectbrief里教授要求的分的章节，分的有点丑但是先丰富内容再美化格式把。
 Luca 2026-11-19 README：B3 标记完成；前沿探索、转弯加权、增量重算移至新增可选扩展任务 E3；Python 版本说明更新为 3.10+（开发使用 3.14.7）
+Luca 2026-11-19 Result.md 引用 MicroMouse Maze Library 与 Ariadne，调整“本组提出”措辞；核实发现 6 为生成器偏差；导入 391 张比赛迷宫到 mazes/classic；上位机新增 Wilson/Prim/Kruskal 生成器、批量生成与子文件夹地图库
+Luca 2026-11-19 全部地图（含核心 3 张）统一放入 mazes/classic/，上位机与测试改为读取该目录；地图库保持单一文件夹，批量生成也存入其中
+Luca 2026-11-19 批量导入功能合并进 mazes/convert_external.py（--batch），删除 import_maze_tool.py

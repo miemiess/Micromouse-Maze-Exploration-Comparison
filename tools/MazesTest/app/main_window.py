@@ -1,9 +1,9 @@
-"""主窗口：地图库（项目的 mazes/ 目录）的选择、导入、导出与保存，三个功能页，菜单与"未保存修改"处理。
+"""主窗口：地图库（项目的 mazes/classic/ 目录）的选择、导入、导出与保存，三个功能页，菜单与"未保存修改"处理。
 
 主窗口持有唯一的当前地图（MazeDocument）。编辑页直接修改它；切换到运行页或对比页时，
 若地图有改动，就验证后转换为 Maze 交给这两页重新开始，保证运行的总是最新地图。
 
-地图下拉框列出地图库 mazes/ 中的全部地图（上位机与实验共用）。
+地图下拉框列出地图库 mazes/classic/ 中的全部地图（上位机与实验共用）。
 """
 
 from pathlib import Path
@@ -17,10 +17,10 @@ from simulation import EXPLORE, KNOWN_MAP, ROOT, discover_algorithms
 
 from .tabs import CompareTab, EditorTab, RunTab
 
-MAZE_DIR = ROOT / "mazes"  # 项目独立的地图目录
+MAZE_DIR = ROOT / "mazes" / "classic"  # 项目的地图目录：全部地图统一放在这里
 
 HELP_TEXT = """<h3>电脑鼠迷宫探索</h3>
-<p><b>地图</b>：下拉框中列出地图库 mazes/ 中的全部地图。
+<p><b>地图</b>：下拉框中列出地图库 mazes/classic/ 中的全部地图。
 "导入"会先验证文件是否为合法迷宫，再复制进地图库；"导出"把当前地图另存到任意位置；
 "保存到地图库"把编辑结果写回地图库。</p>
 <p><b>外部迷宫只读</b>：external_*.json 是整理好的比赛迷宫，不会被覆盖。修改后保存时自动另存为
@@ -48,7 +48,7 @@ class MainWindow(QMainWindow):
 
         Args:
             initial: 启动时打开的迷宫文件；None 时打开 地图库中的第一张，没有则随机生成一张。
-            map_dir: 地图库文件夹，默认项目的 mazes/（测试时可换成临时目录）。
+            map_dir: 地图库文件夹，默认项目的 mazes/classic/（测试时可换成临时目录）。
         """
         super().__init__()
         self.library = MapLibrary(map_dir)
@@ -67,6 +67,7 @@ class MainWindow(QMainWindow):
         self.editor_tab.documentReplaced.connect(self.set_document)
         self.editor_tab.saveRequested.connect(self.save_to_library)
         self.editor_tab.exportRequested.connect(self.export_dialog)
+        self.editor_tab.batchGenerated.connect(self.save_generated_batch)
 
         self.tabs = QTabWidget()
         self.tabs.addTab(self.run_tab, "▶ 实时运行")
@@ -106,7 +107,7 @@ class MainWindow(QMainWindow):
         toolbar.addWidget(self.map_combo)
 
         import_action = QAction("导入地图…", self, shortcut=QKeySequence.Open)
-        import_action.setToolTip("验证外部迷宫文件，合法后复制进地图库 mazes/")
+        import_action.setToolTip("验证外部迷宫文件，合法后复制进地图库 mazes/classic/")
         import_action.triggered.connect(self.import_dialog)
         export_action = QAction("导出地图…", self, shortcut=QKeySequence.SaveAs)
         export_action.setToolTip("把当前地图另存到任意位置")
@@ -267,6 +268,26 @@ class MainWindow(QMainWindow):
             message = f"已保存：{doc.path}"
         self.statusBar().showMessage(message, 10000)
         return True
+
+    def save_generated_batch(self, docs: list[MazeDocument]) -> list:
+        """把批量生成的地图存入地图库，返回实际写入的文件。
+
+        同名文件已存在时跳过，不覆盖；完成后刷新下拉框，并在状态栏报告数量。
+        """
+        written = []
+        for doc in docs:
+            try:
+                path = self.library.save_generated(doc)
+            except (OSError, ValueError) as exc:
+                QMessageBox.warning(self, "批量生成失败", f"{doc.maze_id}：{exc}")
+                break
+            if path is not None:
+                written.append(path)
+        self._populate_maps()
+        skipped = len(docs) - len(written)
+        message = f"已生成 {len(written)} 张地图到地图库"
+        self.statusBar().showMessage(message + (f"，跳过 {skipped} 张已存在的" if skipped else ""), 10000)
+        return written
 
     def _check_savable(self, doc: MazeDocument) -> bool:
         """地图有错误时提示并返回 False。"""

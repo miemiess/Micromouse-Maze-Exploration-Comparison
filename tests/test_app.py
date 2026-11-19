@@ -26,7 +26,7 @@ if HAS_QT:
     from maze_app import main as app_main
     from simulation import Maze, Runner, discover_algorithms, load_algorithm
 
-MAZE = ROOT / "mazes" / "external_uk2011f.json"
+MAZE = ROOT / "mazes" / "classic" / "external_uk2011f.json"
 
 
 @unittest.skipUnless(HAS_QT, "PySide6 not installed")
@@ -58,14 +58,14 @@ class AppTests(unittest.TestCase):
         self.assertEqual(self.window.map_combo.currentText(), "imported")
 
         original = MAZE.read_bytes()
-        self.window.open_path(MAZE)  # 测试用的地图库是临时目录，真实 mazes/ 相当于库外文件
+        self.window.open_path(MAZE)  # 测试用的地图库是临时目录，真实 mazes/classic/ 相当于库外文件
         self.assertIn("外部文件", self.window.map_combo.currentText())
         self.window.editor_tab._on_edge_clicked((0, 0), (0, 1))
         self.assertTrue(self.window.save_to_library())
         self.assertEqual(self.window.document.path.parent, self.map_dir)
         self.assertEqual(MAZE.read_bytes(), original)
         labels = [self.window.map_combo.itemText(i) for i in range(self.window.map_combo.count())]
-        self.assertEqual(labels, ["external_uk2011f", "imported"])
+        self.assertEqual(labels, ["imported", "uk2011f_edit"])  # 外部迷宫修改后不会以 external_ 名称另存
 
     def test_run_tab_matches_core_runner(self):
         """运行页跑完的统计与直接使用 Runner 的结果相同，画布可以正常绘制。"""
@@ -141,6 +141,22 @@ class AppTests(unittest.TestCase):
         self.assertEqual(self.window.document.width, 6)
         self.assertIn("未保存", self.window.map_combo.currentText())
 
+    def test_batch_generation_with_chosen_algorithm(self):
+        """批量生成按所选算法和连续种子写入地图库，并出现在下拉框中；重复生成时跳过。"""
+        editor = self.window.editor_tab
+        editor.new_width.setValue(5)
+        editor.new_height.setValue(5)
+        editor.gen_algorithm.setCurrentIndex(editor.gen_algorithm.findData("wilson"))
+        editor.gen_seed.setValue(3)
+        editor.batch_count.setValue(4)
+        editor._generate_batch()
+        files = sorted(p.name for p in self.map_dir.glob("gen_*.json"))
+        self.assertEqual(files, [f"gen_wilson_5x5_s{s}.json" for s in (3, 4, 5, 6)])
+        labels = [self.window.map_combo.itemText(i) for i in range(self.window.map_combo.count())]
+        self.assertIn("gen_wilson_5x5_s3", labels)
+        editor._generate_batch()
+        self.assertIn("跳过 4 张", self.window.statusBar().currentMessage())
+
 
 @unittest.skipUnless(HAS_QT, "PySide6 not installed")
 class ExportTests(unittest.TestCase):
@@ -181,9 +197,10 @@ class ExportTests(unittest.TestCase):
 
     def test_command_line_batch_export(self):
         """命令行批量导出：每张地图一张 PNG；指定算法时文件名带算法名。"""
-        pattern = str(ROOT / "mazes" / "*.json")
+        core = [str(ROOT / "mazes" / "classic" / f"external_{name}.json")
+                for name in ("1stworld", "japan2017ef", "uk2011f")]  # 3 张核心迷宫
         with contextlib.redirect_stdout(io.StringIO()):
-            app_main(["--export", pattern, "-o", str(self.out), "--size", "300"])
+            app_main(["--export", *core, "-o", str(self.out), "--size", "300"])
             app_main(["--export", str(MAZE), "-o", str(self.out), "--strategy", "dfs"])
         self.assertEqual(len(list(self.out.glob("external_*.png"))), 4)
         self.assertTrue((self.out / "external_uk2011f_dfs.png").exists())

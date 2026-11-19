@@ -21,7 +21,9 @@ from random_walk import RandomWalkStrategy  # noqa: E402
 from repeated_astar import RepeatedAStarStrategy  # noqa: E402
 from wall_follower import LeftWallFollower, RightWallFollower  # noqa: E402
 
-EXTERNAL = sorted((ROOT / "mazes").glob("external_*.json"))
+# 3 张核心比赛迷宫（mazes/classic/ 中还有导入的 391 张，测试只用这 3 张以保持速度）。
+EXTERNAL = [ROOT / "mazes" / "classic" / name for name in
+            ("external_1stworld.json", "external_japan2017ef.json", "external_uk2011f.json")]
 
 
 def run(maze: Maze, strategy) -> dict:

@@ -115,7 +115,7 @@ Flood-Fill 的距离传播可以用 BFS 实现，因此不把“BFS”和“Floo
 | 算法设计与选择理由 | 各策略的流程、伪代码、数据结构及适用场景 | `src/dfs.py`、`src/flood_fill.py`；报告 |
 | 复杂度分析 | 单次更新、整个探索过程、内存开销，区分计算与移动成本 | 报告 |
 | Python 概念验证 | 可重复运行的环境、多个策略与可选创新方案；仅阅读源码不够 | `src/` |
-| 实验评价 | 统一测试集、预算、指标、批量执行和图表 | `mazes/`、`src/`、`results/` |
+| 实验评价 | 统一测试集、预算、指标、批量执行和图表 | `mazes/classic/`、`src/`、`results/` |
 | 局限与改进 | 理想观测、地图代表性、实现选择、预算及改进方向 | 报告 |
 | 最终报告 | 汇总方法、证据、结论及代码引用 | `Docs/` |
 
@@ -129,7 +129,7 @@ Flood-Fill 的距离传播可以用 BFS 实现，因此不把“BFS”和“Floo
 | --- | --- | --- | --- | --- |
 | A1 环境与地图 | 明确地图格式和统一策略接口，整理运行规则 | `src/README.md`：坐标与方向、地图 JSON、Observation、Strategy 接口、运行状态与统计指标；其他模块能据此接入 | 无，优先 | yuchen-1412 / 已完成 |
 | A2 环境与地图 | 实现观测、移动、转向计数、未知地图隔离 | `src/environment.py`（地图验证、观测、移动、统计）；`tests/test_environment.py`、`tests/test_external_integration.py` 验证墙壁一致、移动合法、无真值泄漏 | A1 | yuchen-1412 / 已完成 |
-| A3 环境与地图 | 整理地图、来源与起终点 | `mazes/`：3 张外部 16×16 比赛迷宫（`external_*`，只读）、来源与许可证说明（`mazes/README.md`）、转换脚本 `mazes/convert_external.py`；比赛迷宫含死路、多分支和环路。20 张测试地图与小调试地图待补充（可用上位机随机生成并记录种子） | A1；可先整理来源 | yuchen-1412 / 已完成 |
+| A3 环境与地图 | 整理地图、来源与起终点 | `mazes/classic/`：3 张核心 16×16 比赛迷宫（`external_*`，只读）、来源与许可证说明（`mazes/README.md`）、转换脚本 `mazes/convert_external.py`；比赛迷宫含死路、多分支和环路。后续补充：从同一上游批量导入 391 张比赛迷宫，与核心 3 张统一放在 `mazes/classic/`（`mazes/convert_external.py --batch`，跳过原因见 `mazes/classic/README.md`）；上位机支持递归回溯、Wilson、Prim、Kruskal 四种生成器与批量生成（记录种子）。测试集的选取与开发 / 测试划分由 D1 确定 | A1；可先整理来源 | yuchen-1412 / 已完成 |
 | B1 已有算法 | 阅读候选源码，登记要实现的算法与假设 | [`Docs/algorithm-methods.md`](Docs/algorithm-methods.md)：全部已实现算法的信息假设、方向规则、失败条件、随机性、复杂度与对照关系；Python Flood-Fill 与 PythonRobotics A* 源码阅读记录（版本、许可证、与本组实现的差异）；文献出处待核查。新增算法时在该文档补登记 | 无，可立即开展 | mmy / 已完成 |
 | B2 基线 | 接入 DFS＋实际回溯与 Flood-Fill；可由不同成员分别认领 | `src/dfs.py`（DFS＋实际回溯）、`src/flood_fill.py`（乐观未知边、全量 BFS 重算），均提供可选 `debug_view` 供可视化；`tests/test_strategies.py` 在小地图和 3 张比赛迷宫上验证到达、无路处理、可复现 | A1/A2 | mmy / 已完成 |
 | B3 更多算法 | 在基础规则下补充有明确对照意义的探索算法 | 每算法一个扁平文件，按 `src/algorithm_api.py` 接口编写，并在 `Docs/algorithm-methods.md` 登记信息假设、循环/无路处理与复杂度。已完成（测试见 `tests/test_strategies.py`）：沿墙法 `src/wall_follower.py`（左手 / 右手，按（位置, 朝向）重复判定循环）、随机游走 `src/random_walk.py`（下界基线）、贪心 DFS `src/greedy_dfs.py`（只改邻格顺序的消融对照）、重复 A* `src/repeated_astar.py`（与 Flood-Fill 同样乐观，按需重新规划）。前沿探索、转弯加权、增量重算移至 E3 | A1/A2 | mmy / 已完成 |
@@ -194,7 +194,7 @@ CONTRIBUTING.md    main 分支协作教程
 requirements.txt  Python 直接依赖
 Docs/             brief、proposal、实验方案、报告等文档
 src/              环境、算法、实验、绘图代码，保持扁平
-mazes/            地图文件和来源说明（实验与上位机共用；external_* 只读）
+mazes/            地图说明与导入脚本；全部地图在 mazes/classic/（实验与上位机共用；external_* 只读）
 tools/            辅助工具，每个工具一个子文件夹（见 tools/README.md）
 tests/            环境与工具的单元测试
 results/          原始 CSV、统计图及运行元数据

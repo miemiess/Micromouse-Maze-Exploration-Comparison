@@ -18,7 +18,7 @@ from PySide6.QtWidgets import (
     QListWidgetItem, QMessageBox, QPlainTextEdit, QPushButton, QRadioButton, QScrollArea,
     QSlider, QSpinBox, QSplitter, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget)
 
-from maze_document import MazeDocument, generate
+from maze_document import GENERATORS, MazeDocument, generate
 from simulation import ROOT, AlgorithmInfo, Direction, Maze, Runner
 
 from .export import export_gif, render_image, save_png, snapshot_title, tile_images
@@ -647,12 +647,14 @@ class EditorTab(QWidget):
         documentReplaced(MazeDocument): 新建或随机生成了另一张地图。
         saveRequested: 点击了"保存到地图库"，由主窗口写入地图库。
         exportRequested: 点击了"导出…"，由主窗口选择位置导出。
+        batchGenerated(list[MazeDocument]): 批量生成了一组地图，由主窗口存入地图库。
     """
 
     documentEdited = Signal()
     documentReplaced = Signal(object)
     saveRequested = Signal()
     exportRequested = Signal()
+    batchGenerated = Signal(object)
 
     def __init__(self, parent=None):
         """创建可编辑画布和工具栏。"""
@@ -708,6 +710,10 @@ class EditorTab(QWidget):
         size_row.addWidget(self.new_width)
         size_row.addWidget(QLabel("×"))
         size_row.addWidget(self.new_height)
+        self.gen_algorithm = QComboBox()
+        for key, (title, _, feature) in GENERATORS.items():
+            self.gen_algorithm.addItem(f"{title}（{feature}）", key)
+        self.gen_algorithm.setToolTip("不同生成算法的迷宫结构不同；实验只用一种生成器，结论可能有偏差")
         self.gen_seed = QSpinBox(minimum=0, maximum=10**6, value=1)
         self.gen_loops = QDoubleSpinBox(minimum=0, maximum=100, value=0, suffix=" %", decimals=0)
         self.gen_loops.setToolTip("生成完美迷宫后再随机拆掉的内部墙比例，用来制造环路")
@@ -715,13 +721,23 @@ class EditorTab(QWidget):
         blank_button.clicked.connect(self._new_blank)
         gen_button = QPushButton("随机生成")
         gen_button.clicked.connect(self._generate)
+        self.batch_count = QSpinBox(minimum=1, maximum=500, value=10, suffix=" 张")
+        self.batch_count.setToolTip("从当前种子开始连续编号，例如种子 1、数量 10 → 种子 1～10")
+        batch_button = QPushButton("批量生成到地图库")
+        batch_button.setToolTip("按上面的参数生成多张地图，存入地图库；同名文件跳过")
+        batch_button.clicked.connect(self._generate_batch)
         new.addRow("宽 × 高", size_row)
+        new.addRow("生成算法", self.gen_algorithm)
         new.addRow("随机种子", self.gen_seed)
         new.addRow("环路比例", self.gen_loops)
         row = QHBoxLayout()
         row.addWidget(blank_button)
         row.addWidget(gen_button)
         new.addRow(row)
+        batch_row = QHBoxLayout()
+        batch_row.addWidget(self.batch_count)
+        batch_row.addWidget(batch_button, 1)
+        new.addRow("批量", batch_row)
 
         check_box = QGroupBox("检查")
         self.check_label = QLabel(wordWrap=True)
@@ -730,7 +746,7 @@ class EditorTab(QWidget):
         file_box = QGroupBox("文件")
         file_row = QHBoxLayout(file_box)
         save_button = QPushButton("💾 保存到地图库")
-        save_button.setToolTip("保存到 mazes/<地图 ID>.json；外部迷宫（external_*）只读，修改后自动另存为新地图")
+        save_button.setToolTip("保存到 mazes/classic/<地图 ID>.json；外部迷宫（external_*）只读，修改后自动另存为新地图")
         save_button.clicked.connect(self.saveRequested)
         export_button = QPushButton("导出…")
         export_button.setToolTip("把当前地图另存一份到任意位置，不改变当前地图对应的文件")
@@ -832,9 +848,19 @@ class EditorTab(QWidget):
             doc.dirty = True
             self.documentReplaced.emit(doc)
 
+    def _generate_one(self, seed: int) -> MazeDocument:
+        """按当前的尺寸、生成算法和环路比例，用指定种子生成一张地图。"""
+        return generate(self.new_width.value(), self.new_height.value(), seed=seed,
+                        loop_fraction=self.gen_loops.value() / 100,
+                        algorithm=self.gen_algorithm.currentData())
+
     def _generate(self) -> None:
-        """按尺寸、种子和环路比例随机生成地图。"""
+        """按尺寸、生成算法、种子和环路比例随机生成一张地图，并打开它。"""
         if self.confirm_discard():
-            self.documentReplaced.emit(generate(
-                self.new_width.value(), self.new_height.value(),
-                seed=self.gen_seed.value(), loop_fraction=self.gen_loops.value() / 100))
+            self.documentReplaced.emit(self._generate_one(self.gen_seed.value()))
+
+    def _generate_batch(self) -> None:
+        """从当前种子开始连续生成多张地图，交给主窗口存入地图库。"""
+        start = self.gen_seed.value()
+        self.batchGenerated.emit([self._generate_one(seed)
+                                  for seed in range(start, start + self.batch_count.value())])

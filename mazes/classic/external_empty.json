@@ -1,0 +1,1 @@
+{"maze_id":"external_empty","width":16,"height":16,"start":[0,0],"start_heading":"N","goals":[[7,7],[7,8],[8,7],[8,8]],"blocked_edges":[[[0,0],[1,0]]],"metadata":{"source":"micromouseonline/micromouse_maze_tool","source_file":"mazefiles/binary/empty.maz","revision":"12118e413f6be8341ea7f64c100e7625178cd6dc","seed":null,"notes":"转换墙壁格式；起点、朝向和中央目标为项目实验设定"}}

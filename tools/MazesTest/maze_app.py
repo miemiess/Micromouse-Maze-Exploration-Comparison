@@ -2,12 +2,12 @@
 
 打开应用：
     python tools/MazesTest/maze_app.py                                   # 打开 地图库中的第一张地图
-    python tools/MazesTest/maze_app.py mazes/external_uk2011f.json
+    python tools/MazesTest/maze_app.py mazes/classic/external_uk2011f.json
 
 批量导出（不显示窗口，默认输出到 results/figures/）：
-    python tools/MazesTest/maze_app.py --export "mazes/*.json"                       # 每张地图一张 PNG
-    python tools/MazesTest/maze_app.py --export "mazes/*.json" --strategy flood_fill  # 运行到结束后的画面
-    python tools/MazesTest/maze_app.py --export mazes/external_uk2011f.json --strategy dfs --gif
+    python tools/MazesTest/maze_app.py --export "mazes/classic/*.json"                       # 每张地图一张 PNG
+    python tools/MazesTest/maze_app.py --export "mazes/classic/*.json" --strategy flood_fill  # 运行到结束后的画面
+    python tools/MazesTest/maze_app.py --export mazes/classic/external_uk2011f.json --strategy dfs --gif
 """
 
 import argparse

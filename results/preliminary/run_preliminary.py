@@ -1,6 +1,6 @@
 """初步实验：为 Docs/Result.md 第 2 章生成对比数据（不替代 D2 的正式批量实验）。
 
-地图：mazes/ 中 3 张外部比赛迷宫 + 30 张随机生成的 16×16 迷宫
+地图：mazes/classic/ 中 3 张核心比赛迷宫 + 30 张随机生成的 16×16 迷宫
       （环路比例 0%、10%、30% 各 10 张，种子 1～10，生成器见 tools/MazesTest/maze_document.py）。
 算法：src/ 中自动发现的全部算法；随机游走的种子等于地图种子（比赛迷宫用 0）。
 规则：src/algorithm_api.run_episode，默认预算 20 × 格子数，计时只含算法自身。
@@ -29,7 +29,8 @@ SEEDS = range(1, 11)
 
 def maze_set():
     """返回 [(地图组, 地图, 种子)]。"""
-    mazes = [("external", Maze.from_json(p), 0) for p in sorted((ROOT / "mazes").glob("external_*.json"))]
+    core = ("external_1stworld.json", "external_japan2017ef.json", "external_uk2011f.json")
+    mazes = [("external", Maze.from_json(ROOT / "mazes" / "classic" / name), 0) for name in core]
     for loop in LOOPS:
         for seed in SEEDS:
             mazes.append((f"gen_loop{int(loop * 100)}", generate(16, 16, seed=seed, loop_fraction=loop).to_maze(), seed))

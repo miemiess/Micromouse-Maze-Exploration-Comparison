@@ -7,11 +7,11 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools" / "MazesTest"))
-from maze_document import MapLibrary, MazeDocument, default_goals, generate  # noqa: E402
+from maze_document import GENERATORS, MapLibrary, MazeDocument, default_goals, generate  # noqa: E402
 from simulation import (EXPLORE, KNOWN_MAP, Direction, Maze, Runner,  # noqa: E402
                         discover_algorithms, load_algorithm, maze_walls)
 
-MAZE = ROOT / "mazes" / "external_uk2011f.json"
+MAZE = ROOT / "mazes" / "classic" / "external_uk2011f.json"
 
 
 class Scripted:
@@ -167,6 +167,22 @@ class DocumentTests(unittest.TestCase):
         self.assertEqual(default_goals(16, 16), {(7, 7), (7, 8), (8, 7), (8, 8)})
         self.assertEqual(default_goals(5, 5), {(2, 2)})
 
+    def test_all_generators_make_perfect_mazes(self):
+        """每种生成算法都生成完美迷宫：全部连通、无环（开放边数 = 格子数 − 1），且可复现。"""
+        width, height = 9, 7  # 奇数尺寸时目标只有一格，不会额外拆掉目标区内部的墙
+        total_edges = (width - 1) * height + width * (height - 1)
+        for algorithm in GENERATORS:
+            with self.subTest(algorithm=algorithm):
+                doc = generate(width, height, seed=5, algorithm=algorithm)
+                self.assertEqual(len(doc.reachable_from_start()), width * height)
+                self.assertEqual(total_edges - len(doc.walls), width * height - 1)
+                self.assertEqual(doc.walls, generate(width, height, seed=5, algorithm=algorithm).walls)
+                self.assertEqual(doc.check(), ([], []))
+        self.assertEqual(generate(4, 4, seed=1).maze_id, "gen_4x4_s1")  # 递归回溯保持原命名
+        self.assertEqual(generate(4, 4, seed=1, algorithm="wilson").maze_id, "gen_wilson_4x4_s1")
+        with self.assertRaises(ValueError):
+            generate(4, 4, seed=1, algorithm="no_such_generator")
+
 
 class MapLibraryTests(unittest.TestCase):
     def setUp(self):
@@ -220,17 +236,15 @@ class MapLibraryTests(unittest.TestCase):
         self.assertTrue(warnings)
 
     def test_save_never_modifies_outside_files(self):
-        """编辑库外打开的地图后保存，会在库中另存一份，原文件不变。"""
+        """编辑库外打开的外部迷宫后保存：在库中另存为改名后的新地图，原文件不变；之后原地保存。"""
         original = MAZE.read_bytes()
         doc = MazeDocument.load(MAZE)
         doc.toggle_wall((0, 0), (0, 1))
         path = self.library.save(doc)
-        self.assertEqual(path.parent, self.library.folder)
+        self.assertEqual((path.parent, path.name), (self.library.folder, "uk2011f_edit.json"))
         self.assertEqual(MAZE.read_bytes(), original)
-        # 存进库的这份仍是 external_* 外部迷宫，同样只读：再次修改会另存为新地图。
         doc.toggle_wall((0, 0), (0, 1))
-        self.assertEqual(self.library.save(doc).name, "uk2011f_edit.json")
-        self.assertTrue(path.exists())
+        self.assertEqual(self.library.save(doc), path)  # 新地图不再只读，原地保存
 
     def test_external_maps_are_read_only(self):
         """外部迷宫修改后保存会另存为新地图并记录来源；原文件不变；重复另存时编号递增。"""
@@ -259,6 +273,12 @@ class MapLibraryTests(unittest.TestCase):
             self.library.save(renamed)
         self.library.save(MazeDocument.load(external), overwrite=True)  # 即使要求覆盖也不改原文件
         self.assertEqual(external.read_bytes(), original)
+
+    def test_save_generated_skips_existing(self):
+        """批量生成的地图存入地图库；同名文件已存在时跳过，不覆盖。"""
+        first = self.library.save_generated(generate(5, 5, seed=1))
+        self.assertEqual(first.parent, self.library.folder)
+        self.assertIsNone(self.library.save_generated(generate(5, 5, seed=1)))
 
     def test_renaming_saves_as_new_file(self):
         """修改地图 ID 后保存会写入新文件，原文件保留。"""

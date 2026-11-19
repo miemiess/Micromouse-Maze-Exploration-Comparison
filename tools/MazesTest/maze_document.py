@@ -2,7 +2,7 @@
 读写项目 JSON，以及地图库的导入验证与保存。
 
 保存的文件严格符合 src/README.md 的迷宫 JSON 格式，并由 environment.Maze 验证，
-存入地图库（默认项目的 mazes/ 目录）后即可供上位机和实验使用。
+存入地图库（默认项目的 mazes/classic/ 目录）后即可供上位机和实验使用。
 随机生成的地图会在 metadata 中记录生成器和种子。
 
 外部迷宫只读：文件名以 external_ 开头的地图（A3 整理的比赛迷宫）永远不会被覆盖，
@@ -228,12 +228,13 @@ class MazeDocument:
 
 
 class MapLibrary:
-    """地图库：一个专门存放迷宫 JSON 的文件夹（上位机默认使用项目的 mazes/）。
+    """地图库：一个专门存放迷宫 JSON 的文件夹（上位机默认使用项目的 mazes/classic/）。
 
     - 导入：先完整验证外部文件，合法后以规范格式保存为 <maze_id>.json；
     - 保存：一律写到 <maze_id>.json。地图 ID 未改时原地覆盖；改了 ID 相当于另存为新文件；
       从库外打开的文件另存一份到库中，不修改原文件；
-    - 只读保护：目标是 external_*.json 外部迷宫时绝不覆盖，自动改名另存（见 derive_id）；
+    - 只读保护：修改外部迷宫（external_*.json）后保存，或目标是已存在的外部迷宫时，绝不覆盖，
+      自动改名另存（见 derive_id）；
     - 其他重名情况抛出 FileExistsError，由调用方决定是否覆盖。
     """
 
@@ -299,8 +300,8 @@ class MapLibrary:
     def save(self, doc: MazeDocument, *, overwrite: bool = False) -> Path:
         """把地图保存进库中，返回写入的文件。
 
-        目标是只读的外部迷宫时，不会覆盖它：doc 会改用 derive_id 生成的新 ID，
-        metadata 记录 derived_from（原地图 ID），然后保存为新文件。
+        doc 本身来自外部迷宫文件，或目标是已存在的外部迷宫时，不会覆盖：doc 会改用
+        derive_id 生成的新 ID，metadata 记录 derived_from（原地图 ID），然后保存为新文件。
         调用方可比较保存前后的 doc.maze_id 得知是否发生了另存。
 
         Raises:
@@ -308,7 +309,7 @@ class MapLibrary:
             ValueError: 地图不合法。
         """
         target = self.path_for(doc.maze_id)
-        if is_protected_file(target):
+        if doc.read_only or is_protected_file(target):
             original = doc.maze_id
             doc.maze_id = self.derive_id(original)
             doc.metadata = {**doc.metadata, "derived_from": original,
@@ -317,6 +318,13 @@ class MapLibrary:
         same_file = doc.path is not None and Path(doc.path).resolve() == target.resolve()
         if target.exists() and not same_file and not overwrite:
             raise FileExistsError(str(target))
+        return doc.save(target)
+
+    def save_generated(self, doc: MazeDocument) -> Path | None:
+        """把批量生成的地图存入地图库；同名文件已存在时跳过并返回 None（不覆盖）。"""
+        target = self.path_for(doc.maze_id)
+        if target.exists():
+            return None
         return doc.save(target)
 
     def import_file(self, path: str | Path, *, overwrite: bool = False
@@ -344,42 +352,137 @@ def all_edges(width: int, height: int) -> list[Edge]:
     return edges
 
 
+def _neighbours(doc: "MazeDocument", cell: Cell) -> list[Cell]:
+    """网格中与 cell 相邻、且在地图内的格子（不考虑墙）。"""
+    x, y = cell
+    return [(x + dx, y + dy) for dx, dy in DELTAS.values() if doc.inside((x + dx, y + dy))]
+
+
+def _carve(doc: "MazeDocument", a: Cell, b: Cell) -> None:
+    """拆掉 a、b 之间的墙。"""
+    doc.walls.discard(frozenset((a, b)))
+
+
+def _carve_backtracker(doc: "MazeDocument", rng: random.Random) -> None:
+    """递归回溯（随机深度优先）：从起点出发，随机走向未访问邻格，走不通就回退。
+
+    特点：长走廊、分支较少，是有偏的生成方式。
+    """
+    visited, stack = {doc.start}, [doc.start]
+    while stack:
+        options = [n for n in _neighbours(doc, stack[-1]) if n not in visited]
+        if not options:
+            stack.pop()
+            continue
+        nxt = rng.choice(options)
+        _carve(doc, stack[-1], nxt)
+        visited.add(nxt)
+        stack.append(nxt)
+
+
+def _carve_wilson(doc: "MazeDocument", rng: random.Random) -> None:
+    """Wilson 算法：用"擦除回路的随机游走"逐步把格子接入生成树。
+
+    特点：在所有生成树中均匀随机抽取（无偏），没有特定的结构偏好。
+    """
+    cells = [(x, y) for x in range(doc.width) for y in range(doc.height)]
+    in_tree = {rng.choice(cells)}
+    rng.shuffle(cells)
+    for origin in cells:
+        if origin in in_tree:
+            continue
+        step: dict[Cell, Cell] = {}
+        cur = origin
+        while cur not in in_tree:  # 随机游走，重复经过的格子会覆盖去向，相当于擦除回路
+            step[cur] = rng.choice(_neighbours(doc, cur))
+            cur = step[cur]
+        cur = origin
+        while cur not in in_tree:
+            in_tree.add(cur)
+            _carve(doc, cur, step[cur])
+            cur = step[cur]
+
+
+def _carve_prim(doc: "MazeDocument", rng: random.Random) -> None:
+    """随机 Prim 算法：维护"已连通区域"的边界墙，每次随机拆一面通向新格子的墙。
+
+    特点：从起点向外扩散，分支多、短死胡同多。
+    """
+    in_maze = {doc.start}
+    frontier = [(doc.start, n) for n in _neighbours(doc, doc.start)]
+    while frontier:
+        a, b = frontier.pop(rng.randrange(len(frontier)))
+        if b in in_maze:
+            continue
+        _carve(doc, a, b)
+        in_maze.add(b)
+        frontier.extend((b, n) for n in _neighbours(doc, b) if n not in in_maze)
+
+
+def _carve_kruskal(doc: "MazeDocument", rng: random.Random) -> None:
+    """随机 Kruskal 算法：所有墙随机排序，两侧尚未连通就拆掉（并查集判断）。
+
+    特点：各处同时生长，短死胡同分布较均匀。
+    """
+    parent = {(x, y): (x, y) for x in range(doc.width) for y in range(doc.height)}
+
+    def find(cell: Cell) -> Cell:
+        while parent[cell] != cell:
+            parent[cell] = parent[parent[cell]]
+            cell = parent[cell]
+        return cell
+
+    edges = sorted(all_edges(doc.width, doc.height), key=lambda e: sorted(e))
+    rng.shuffle(edges)
+    for edge in edges:
+        a, b = tuple(edge)
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[ra] = rb
+            _carve(doc, a, b)
+
+
+# 可用的生成算法：键 → (显示名称, 实现, 特点说明)。都生成"完美迷宫"（无环、全连通）。
+GENERATORS = {
+    "backtracker": ("递归回溯", _carve_backtracker, "长走廊、分支少（有偏）"),
+    "wilson": ("Wilson", _carve_wilson, "均匀随机生成树（无偏）"),
+    "prim": ("随机 Prim", _carve_prim, "分支多、短死胡同多"),
+    "kruskal": ("随机 Kruskal", _carve_kruskal, "短死胡同分布均匀"),
+}
+
+
 def generate(width: int, height: int, *, seed: int, loop_fraction: float = 0.0,
-             maze_id: str | None = None) -> MazeDocument:
-    """用随机深度优先（递归回溯）生成迷宫，可再随机拆墙制造环路。
+             maze_id: str | None = None, algorithm: str = "backtracker") -> MazeDocument:
+    """随机生成迷宫：先用指定算法生成完美迷宫，再随机拆墙制造环路。
 
     生成的迷宫所有格子互相连通，因此目标一定可达；loop_fraction 为 0 时没有环路（完美迷宫），
     增大后出现多条路线，适合比较算法在环路下的表现。中央目标区内部的墙会被拆掉，
     与比赛迷宫一致。同一组参数和种子总是生成同一张图。
+    不同生成算法有不同的结构偏好（见 GENERATORS），只用一种生成器得到的实验结论可能有偏差。
 
     Args:
         width、height: 尺寸，至少 2 × 2。
         seed: 随机种子，记录在 metadata 中以便复现。
         loop_fraction: 生成后再拆掉剩余内部墙的比例（0~1）。
-        maze_id: 地图标识，默认 gen_<宽>x<高>_s<种子>[_l<比例>]。
+        maze_id: 地图标识；默认递归回溯为 gen_<宽>x<高>_s<种子>[_l<比例>]，
+            其他算法为 gen_<算法>_<宽>x<高>_s<种子>[_l<比例>]。
+        algorithm: 生成算法，GENERATORS 的键之一。
 
     Returns:
         新的 MazeDocument（未保存）。
+
+    Raises:
+        ValueError: 未知的生成算法。
     """
+    if algorithm not in GENERATORS:
+        raise ValueError(f"unknown generator {algorithm!r}; available: {', '.join(GENERATORS)}")
     rng = random.Random(seed)
     if maze_id is None:
-        maze_id = f"gen_{width}x{height}_s{seed}" + \
-            (f"_l{round(loop_fraction * 100)}" if loop_fraction else "")
+        prefix = "gen" if algorithm == "backtracker" else f"gen_{algorithm}"
+        maze_id = f"{prefix}_{width}x{height}_s{seed}" +             (f"_l{round(loop_fraction * 100)}" if loop_fraction else "")
     doc = MazeDocument(maze_id, width, height)
     doc.walls = set(all_edges(width, height))
-
-    visited, stack = {doc.start}, [doc.start]
-    while stack:
-        x, y = stack[-1]
-        options = [(x + dx, y + dy) for dx, dy in DELTAS.values()
-                   if doc.inside((x + dx, y + dy)) and (x + dx, y + dy) not in visited]
-        if not options:
-            stack.pop()
-            continue
-        nxt = rng.choice(options)
-        doc.walls.discard(frozenset(((x, y), nxt)))
-        visited.add(nxt)
-        stack.append(nxt)
+    GENERATORS[algorithm][1](doc, rng)
 
     for a in doc.goals:
         for b in doc.goals:
@@ -389,7 +492,8 @@ def generate(width: int, height: int, *, seed: int, loop_fraction: float = 0.0,
         for wall in rng.sample(remaining, round(len(remaining) * min(loop_fraction, 1.0))):
             doc.walls.discard(wall)
 
-    doc.metadata = {"source": "generated", "generator": "recursive_backtracker",
+    generator = "recursive_backtracker" if algorithm == "backtracker" else algorithm
+    doc.metadata = {"source": "generated", "generator": generator,
                     "seed": seed, "loop_fraction": loop_fraction,
                     "notes": "由 tools/MazesTest/maze_document.py 随机生成"}
     doc.dirty, doc.revision = True, 1
