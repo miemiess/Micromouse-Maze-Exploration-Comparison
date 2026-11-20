@@ -410,5 +410,7 @@ python tools/MazesTest/maze_app.py                   # 上位机：实时运行�
 - S. Koenig, M. Likhachev. D* Lite. AAAI, 2002.（未知地形中的重复规划与增量重算）
 - kerikun11. MicroMouse Maze Library（C++，MIT 许可证）. https://github.com/kerikun11/micromouse-maze-library ；算法说明：https://www.kerislab.jp/micromouse-maze-library/md_docs_algorithm.html （访问于 2026-11-19；三段式探索、未知墙视为墙的回程、梯形加速代价表）
 - akeanti. Ariadne（Python / C++，MIT 许可证）. https://github.com/akeanti/ariadne （访问于 2026-11-19；边 × 朝向状态上的时间最优 Dijkstra，结论来自仿真）
+- micromouseonline. micromouse_maze_tool（MIT 许可证）. https://github.com/micromouseonline/micromouse_maze_tool ，提交 12118e41（外部迷宫库的数据来源，转换说明见 `mazes/README.md`）
+- 电脑鼠比赛规程中关于迷宫结构的规定（除目标区外每根柱子至少连一面墙、目标区单入口），第 4 章柱子规则的依据；具体规程版本待核查。
 - I. Pohl. Heuristic search viewed as path finding in a graph. *Artificial Intelligence*, 1970.（加权 A*）
 - 沿墙法、DFS 回溯与 Flood-Fill 在电脑鼠领域为通用做法；第三方源码阅读记录见 [`Docs/algorithm-methods.md`](algorithm-methods.md) 第 5 节。
