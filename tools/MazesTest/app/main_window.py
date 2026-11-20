@@ -26,7 +26,7 @@ HELP_TEXT = """<h3>电脑鼠迷宫探索</h3>
 "保存到地图库"把编辑结果写回地图库。</p>
 <p><b>外部迷宫只读</b>：external_*.json 是整理好的外部迷宫库地图，不会被覆盖。修改后保存时自动另存为
 新地图（例如 external_uk2011f → uk2011f_edit），metadata 中记录 derived_from。</p>
-<p><b>实时运行</b>：选择算法后点"运行"或"单步"。算法与实验使用同一个环境（src/environment.py），
+<p><b>实时运行</b>：选择算法后点"运行"或"单步"。算法与实验使用同一个环境（src/core/environment.py），
 统计数字就是环境真实记录的结果。</p>
 <ul>
 <li>黑色墙：电脑鼠已观测到的墙；灰色墙：还没观测到的墙（迷雾模式下隐藏）；</li>
@@ -36,9 +36,9 @@ HELP_TEXT = """<h3>电脑鼠迷宫探索</h3>
 <p><b>同屏对比</b>：勾选 2~4 个探索算法，在同一张地图上同步推进，表格中成功且步数最少的一行标绿。</p>
 <p><b>已知地图规划</b>：BFS 等一开始就拿到完整地图的算法单独成页，作为参照，
 不与探索算法放在同一个对比里（README 规定两类分开比较）。</p>
-<p><b>批量实验</b>：勾选多张地图和多个算法，批量运行（不显示动画），自动导出 runs.csv、summary.csv、metadata.json 和图表到 results/；规则见 Docs/experiment-plan.md。</p>
+<p><b>批量实验</b>：勾选多张地图和多个算法，批量运行（不显示动画），自动导出 runs.csv、summary.csv、metadata.json 和图表到 results/local/；正式实验规则见 Docs/basic/experiment-plan.md。</p>
 <p><b>地图编辑</b>：点击格子边缘加墙/拆墙，切换工具设置起点和目标；可新建、随机生成（记录种子）。</p>
-<p>新算法：在 src/ 中新建文件，按 src/algorithm_api.py 的接口写一个类，重启应用后自动出现在对应页面；
+<p>新算法：在 src/ext/algorithms/ 中新建文件，按 src/core/algorithm_api.py 的接口写一个类，重启应用后自动出现在对应页面；
 实现可选的 debug_view() 即可显示距离、路线等内部状态（格式见 tools/MazesTest/README.md）。</p>"""
 
 
@@ -85,7 +85,7 @@ class MainWindow(QMainWindow):
         if errors:
             self.statusBar().showMessage("以下算法文件导入失败：" + "；".join(errors))
         elif not self.algorithms:
-            self.statusBar().showMessage("src/ 中没有找到符合 algorithm_api 接口的算法")
+            self.statusBar().showMessage("src/basic/algorithms/ 与 src/ext/algorithms/ 中没有找到符合接口的算法")
         else:
             self.statusBar().showMessage(
                 f"探索算法：{', '.join(explorers) or '无'}；已知地图算法：{', '.join(planners) or '无'}")

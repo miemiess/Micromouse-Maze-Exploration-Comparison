@@ -90,7 +90,7 @@ def import_batch(source_dir: Path, revision: str, out: Path = OUT) -> tuple[list
         (导入的上游文件名列表, [(被跳过的上游文件名, 原因)])。
     """
     sys.path.insert(0, str(HERE.parent / "src"))
-    from environment import Maze  # 只有批量导入需要，单张转换不依赖 src/
+    from core.environment import Maze  # 只有批量导入需要，单张转换不依赖 src/
 
     out.mkdir(exist_ok=True)
     existing = {}

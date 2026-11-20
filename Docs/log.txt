@@ -28,3 +28,4 @@ Luca 2026-11-20 完成 C1/C2：src/prior_astar.py（先验增强重复 A*：柱�
 Luca 2026-11-20 清理：删除过时的 results/preliminary（已被正式实验取代）；去掉文档中的重复内容与失效引用
 Luca 2026-11-20 删除实验 3（与调参记录重复），开发集只保留 results/standard/dev（tuning.md + tune_dev.py）
 Luca 2026-11-20 事后分析：按地图来源分层的开发集（20% 外部迷宫库 + 生成图）重新调参，选出 c = 0，留出集上与重复 A* 相同；写入报告 4.5（标注为事后分析）与 results/standard/dev/posthoc.md
+Luca 2026-11-20 目录大重组：src/core（公共接口）、src/basic（基础规则，冻结）、src/ext（扩展）；results、Docs、tests 同样分层；实验计划拆到 src/basic/plan.py（--plan basic），消融改为算法类属性声明；新增基础规则回归测试；README 重写，新增 Docs/ext/dev-plan.md 扩展路线图

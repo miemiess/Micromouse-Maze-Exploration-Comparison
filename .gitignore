@@ -20,6 +20,8 @@ htmlcov/
 Thumbs.db
 
 # 临时产物；正式实验 CSV、图表和 Docs PDF 应提交
+# 自选实验与上位机导出（results/local/），正式结果在 results/basic/、results/ext/
+results/local/
 tmp/
 *.tmp
 *.log

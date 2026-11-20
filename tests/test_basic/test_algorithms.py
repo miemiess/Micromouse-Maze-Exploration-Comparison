@@ -1,0 +1,290 @@
+"""基础规则算法（src/basic/algorithms/）的验证：DFS、贪心 DFS、Flood-Fill、重复 A*、先验增强重复 A*、沿墙法、随机游走（探索），
+BFS、A*（已知地图规划）。
+
+探索算法只依赖观测、能到达目标或正确判定无路、结果可复现；BFS 给出最短路参照。
+"""
+
+import sys
+import unittest
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "src"))
+from core.algorithm_api import run_episode  # noqa: E402
+from basic.algorithms.astar import AStarPlanner  # noqa: E402
+from basic.algorithms.bfs import BfsPlanner  # noqa: E402
+from basic.algorithms.dfs import DfsStrategy  # noqa: E402
+from core.environment import Direction, Maze, MazeEnvironment, Observation  # noqa: E402
+from basic.algorithms.flood_fill import FloodFillStrategy  # noqa: E402
+from basic.algorithms.greedy_dfs import GreedyDfsStrategy  # noqa: E402
+from basic.algorithms.prior_astar import (PriorAStarFixedPenalty, PriorAStarNoPenalty,  # noqa: E402
+                         PriorAStarNoPostRule, PriorAStarStrategy, _PriorAStar)
+from basic.algorithms.random_walk import RandomWalkStrategy  # noqa: E402
+from basic.algorithms.repeated_astar import RepeatedAStarStrategy  # noqa: E402
+from basic.algorithms.wall_follower import LeftWallFollower, RightWallFollower  # noqa: E402
+
+# 3 张核心比赛迷宫（mazes/classic/ 中还有导入的 391 张，测试只用这 3 张以保持速度）。
+EXTERNAL = [ROOT / "mazes" / "classic" / name for name in
+            ("external_1stworld.json", "external_japan2017ef.json", "external_uk2011f.json")]
+
+
+def run(maze: Maze, strategy) -> dict:
+    """按 src/README.md 的调用示例运行一次，返回环境统计。"""
+    env = MazeEnvironment(maze)
+    strategy.reset(width=maze.width, height=maze.height, start=maze.start,
+                   goals=frozenset(maze.goals), initial_heading=maze.start_heading, seed=0)
+    observation = env.reset()
+    while env.status == "running":
+        direction = strategy.choose_direction(observation)
+        if direction is None:
+            env.finish("loop_detected" if getattr(strategy, "loop_detected", False) else "no_path")
+            break
+        observation = env.step(direction).observation
+    return env.summary()
+
+
+def small_maze(**changes) -> Maze:
+    """3×3 小地图，默认无内部墙、目标在右上角。"""
+    data = {"maze_id": "t", "width": 3, "height": 3, "start": [0, 0],
+            "start_heading": "N", "goals": [[2, 2]], "blocked_edges": [], "metadata": {}}
+    data.update(changes)
+    return Maze(data)
+
+
+class StrategyTests(unittest.TestCase):
+    STRATEGIES = (DfsStrategy, GreedyDfsStrategy, FloodFillStrategy, RepeatedAStarStrategy,
+                  PriorAStarStrategy, PriorAStarNoPostRule, PriorAStarNoPenalty,
+                  PriorAStarFixedPenalty)
+
+    def test_reach_goal_on_external_mazes(self):
+        """两种策略在三张比赛迷宫上都能在预算内到达目标，路径为逐格真实移动。"""
+        for path in EXTERNAL:
+            maze = Maze.from_json(path)
+            for cls in self.STRATEGIES:
+                with self.subTest(maze=path.stem, strategy=cls.name):
+                    summary = run(maze, cls())
+                    self.assertEqual(summary["status"], "success")
+                    self.assertEqual(len(summary["path"]), summary["steps"] + 1)
+                    self.assertIn(summary["path"][-1], maze.goals)
+
+    def test_dfs_moves_at_most_twice_per_cell(self):
+        """DFS 每格最多进出各一次，因此步数不超过 2 × 格子数。"""
+        for path in EXTERNAL:
+            maze = Maze.from_json(path)
+            self.assertLessEqual(run(maze, DfsStrategy())["steps"], 2 * maze.width * maze.height)
+
+    def test_flood_fill_goes_straight_on_open_map(self):
+        """没有内部墙时 Flood-Fill 走最短路，并优先保持朝向（只转一次弯）。"""
+        summary = run(small_maze(), FloodFillStrategy())
+        self.assertEqual((summary["steps"], summary["turns_90"]), (4, 1))
+        self.assertEqual(summary["repeat_visits"], 0)
+
+    def test_enclosed_goal_reports_no_path(self):
+        """目标被墙围住时，两种策略都在探索完可达区域后返回 None。"""
+        maze = small_maze(blocked_edges=[[[1, 2], [2, 2]], [[2, 1], [2, 2]]])
+        for cls in self.STRATEGIES:
+            with self.subTest(strategy=cls.name):
+                self.assertEqual(run(maze, cls())["status"], "no_path")
+
+    def test_deterministic_and_reusable_after_reset(self):
+        """同一对象 reset 后再次运行，结果完全相同。"""
+        maze = Maze.from_json(EXTERNAL[0])
+        for cls in self.STRATEGIES:
+            strategy = cls()
+            self.assertEqual(run(maze, strategy), run(maze, strategy))
+
+    def test_debug_view_format(self):
+        """debug_view 返回可视化工具约定的键，且坐标在地图内。"""
+        maze = Maze.from_json(EXTERNAL[0])
+        for cls in self.STRATEGIES:
+            strategy = cls()
+            run(maze, strategy)
+            view = strategy.debug_view()
+            self.assertTrue(set(view) <= {"known_walls", "cell_text", "cell_color", "plan"})
+            for x, y, _ in view["cell_text"]:
+                self.assertTrue(0 <= x < maze.width and 0 <= y < maze.height)
+
+
+class WallFollowerTests(unittest.TestCase):
+    def test_reaches_goal_on_wall_connected_path(self):
+        """目标与外墙相连时，左手法沿外墙走到目标。"""
+        summary = run(small_maze(), LeftWallFollower())
+        self.assertEqual((summary["status"], summary["steps"]), ("success", 4))
+
+    def test_detects_loop_when_goal_is_an_island(self):
+        """中央目标不与外墙相连：左右手法都绕外圈一周后判定循环，记为 loop_detected。"""
+        maze = small_maze(goals=[[1, 1]])
+        for cls in (LeftWallFollower, RightWallFollower):
+            with self.subTest(strategy=cls.name):
+                strategy = cls()
+                summary = run(maze, strategy)
+                self.assertEqual(summary["status"], "loop_detected")
+                self.assertTrue(strategy.loop_detected)
+                self.assertEqual(run_episode(maze, cls())["status"], "loop_detected")
+                self.assertNotIn((1, 1), summary["path"])
+
+    def test_always_terminates_on_external_mazes(self):
+        """比赛迷宫上必定在 4 × 格子数次决策内结束（到达目标或判定循环）。"""
+        for path in EXTERNAL:
+            maze = Maze.from_json(path)
+            for cls in (LeftWallFollower, RightWallFollower):
+                with self.subTest(maze=path.stem, strategy=cls.name):
+                    summary = run(maze, cls())
+                    self.assertIn(summary["status"], {"success", "loop_detected"})
+                    self.assertLessEqual(summary["steps"], 4 * maze.width * maze.height)
+
+
+class BfsPlannerTests(unittest.TestCase):
+    def test_shortest_path_and_runner(self):
+        """BFS 给出最短路；驱动逐格执行后步数等于路径长度，并报告扩展节点数。"""
+        result = run_episode(small_maze(), BfsPlanner())
+        self.assertEqual((result["status"], result["steps"], result["mode"]),
+                         ("success", 4, "known_map"))
+        self.assertGreater(result["expanded_nodes"], 0)
+
+    def test_no_explorer_beats_the_known_map_shortest_path(self):
+        """在比赛迷宫上，任何探索算法的步数都不少于 BFS 最短路（BFS 是全知最优参照）。"""
+        for path in EXTERNAL:
+            maze = Maze.from_json(path)
+            shortest = run_episode(maze, BfsPlanner())["steps"]
+            for cls in (DfsStrategy, FloodFillStrategy):
+                with self.subTest(maze=path.stem, strategy=cls.name):
+                    self.assertGreaterEqual(run(maze, cls())["steps"], shortest)
+
+    def test_unreachable_goal(self):
+        """目标被墙封闭时规划返回 None，运行记为 no_path。"""
+        maze = small_maze(blocked_edges=[[[1, 2], [2, 2]], [[2, 1], [2, 2]]])
+        self.assertIsNone(BfsPlanner().plan(maze))
+        self.assertEqual(run_episode(maze, BfsPlanner())["status"], "no_path")
+
+
+class RandomWalkTests(unittest.TestCase):
+    def test_same_seed_is_reproducible(self):
+        """同一种子结果完全相同，不同种子路线不同；seed 为 None 时等同于 0。"""
+        maze = Maze.from_json(EXTERNAL[0])
+        first = run_episode(maze, RandomWalkStrategy(), seed=7, max_steps=300)
+        again = run_episode(maze, RandomWalkStrategy(), seed=7, max_steps=300)
+        self.assertEqual(first["path"], again["path"])  # 计算耗时每次不同，只比较路线
+        other = run_episode(maze, RandomWalkStrategy(), seed=8, max_steps=300)
+        self.assertNotEqual(first["path"], other["path"])
+        self.assertEqual(run_episode(maze, RandomWalkStrategy(), seed=None, max_steps=50)["path"],
+                         run_episode(maze, RandomWalkStrategy(), seed=0, max_steps=50)["path"])
+
+    def test_small_maze_and_budget(self):
+        """小地图上能随机走到目标；比赛迷宫上通常耗尽预算，记为 budget_exceeded。"""
+        self.assertEqual(run_episode(small_maze(), RandomWalkStrategy(), seed=1)["status"], "success")
+        result = run_episode(Maze.from_json(EXTERNAL[0]), RandomWalkStrategy(), seed=1, max_steps=200)
+        self.assertEqual((result["status"], result["steps"]), ("budget_exceeded", 200))
+
+
+class GreedyDfsTests(unittest.TestCase):
+    def test_only_the_order_differs_from_dfs(self):
+        """贪心 DFS 与 DFS 只在邻格顺序上不同：开阔小地图上直奔目标，比赛迷宫上路线不同。"""
+        self.assertEqual(run(small_maze(), GreedyDfsStrategy())["steps"], 4)
+        maze = Maze.from_json(EXTERNAL[0])
+        self.assertNotEqual(run(maze, GreedyDfsStrategy())["path"], run(maze, DfsStrategy())["path"])
+
+
+class RepeatedAStarTests(unittest.TestCase):
+    def test_replans_only_when_needed(self):
+        """只在计划被新墙挡住时重新规划：规划次数明显少于移动步数。"""
+        for path in EXTERNAL:
+            maze = Maze.from_json(path)
+            strategy = RepeatedAStarStrategy()
+            summary = run(maze, strategy)
+            with self.subTest(maze=path.stem):
+                self.assertEqual(summary["status"], "success")
+                self.assertLess(strategy.replans, summary["steps"])
+                self.assertGreater(strategy.expanded_total, 0)
+
+
+class _BothOff(_PriorAStar):
+    """两个机制都关闭的先验增强 A*，应与重复 A* 完全相同。"""
+    name = "prior_astar_off"
+    use_post_rule = False
+    unknown_penalty = 0.0
+
+
+def observation(cell, walls):
+    """构造一次观测（walls 为方向字母，如 "SW"）。"""
+    return Observation(cell, Direction.NORTH, frozenset(Direction(w) for w in walls), 0)
+
+
+class PriorAStarTests(unittest.TestCase):
+    def fresh(self, cls=PriorAStarStrategy, size=3, goals=frozenset({(2, 2)})):
+        strategy = cls()
+        strategy.reset(width=size, height=size, start=(0, 0), goals=goals,
+                       initial_heading=Direction.NORTH)
+        return strategy
+
+    def test_both_mechanisms_off_equals_repeated_astar(self):
+        """两个机制都关闭时，每张地图上的路线与重复 A* 逐格相同（消融的基准）。"""
+        for maze in [Maze.from_json(p) for p in EXTERNAL] + [small_maze()]:
+            with self.subTest(maze=maze.maze_id):
+                self.assertEqual(run_episode(maze, _BothOff())["path"],
+                                 run_episode(maze, RepeatedAStarStrategy())["path"])
+
+    def test_post_rule_infers_fourth_edge(self):
+        """柱子 (1, 1) 的 3 条边确认无墙后，推断第 4 条 (0,1)-(1,1) 为墙。"""
+        strategy = self.fresh()
+        strategy._observe(observation((0, 0), "SW"))   # 北、东无墙
+        self.assertEqual(strategy.inferred_total, 0)
+        strategy._observe(observation((1, 0), "S"))    # 西、北、东无墙
+        self.assertIn(frozenset({(0, 1), (1, 1)}), strategy._inferred)
+        self.assertTrue(strategy.post_rule_active)
+
+    def test_post_rule_disables_itself_when_violated(self):
+        """观测推翻软墙（柱子四边都无墙），说明本图不守规则：清空软墙并关闭机制。"""
+        strategy = self.fresh()
+        strategy._observe(observation((0, 0), "SW"))
+        strategy._observe(observation((1, 0), "S"))
+        strategy._observe(observation((0, 1), "W"))    # (0,1)-(1,1) 实际无墙
+        self.assertFalse(strategy.post_rule_active)
+        self.assertEqual(strategy._inferred, set())
+        self.assertTrue(strategy.stats()["post_rule_disabled"])
+
+    def test_goal_centre_post_is_exempt(self):
+        """2×2 目标区中心的柱子不受规则约束（比赛规则的例外）。"""
+        goals = frozenset({(1, 1), (1, 2), (2, 1), (2, 2)})
+        strategy = self.fresh(size=4, goals=goals)
+        self.assertIsNone(strategy._post_edges(2, 2))
+        self.assertIsNotNone(strategy._post_edges(1, 1))
+        self.assertIsNone(strategy._post_edges(0, 2))  # 外边界上的柱子
+
+    def test_wrong_inference_never_causes_failure(self):
+        """没有内部墙的开阔地图处处违反柱子规则，完整版仍然到达目标。"""
+        maze = small_maze(width=5, height=5, goals=[[4, 4]])
+        summary = run_episode(maze, PriorAStarStrategy())
+        self.assertEqual((summary["status"], summary["steps"]), ("success", 8))
+
+    def test_adaptive_penalty_follows_wall_density(self):
+        """δ = c · p / (1 − p)，p 为平滑后的墙比例；尚无观测时 p = 1/2，δ = c。"""
+        strategy = self.fresh()
+        self.assertAlmostEqual(strategy.current_penalty(), PriorAStarStrategy.penalty_scale)
+        strategy._observe(observation((0, 0), "SW"))  # 0 面内部墙、2 条通路
+        p = 1 / 4
+        self.assertAlmostEqual(strategy.current_penalty(),
+                               PriorAStarStrategy.penalty_scale * p / (1 - p))
+        self.assertEqual(self.fresh(PriorAStarNoPenalty).current_penalty(), 0.0)
+
+
+class AStarPlannerTests(unittest.TestCase):
+    def test_same_length_as_bfs_with_fewer_expansions(self):
+        """每步代价为 1 时 A* 与 BFS 最短路长度相同；启发式使扩展节点数不多于 BFS。"""
+        for path in EXTERNAL:
+            maze = Maze.from_json(path)
+            astar, bfs = run_episode(maze, AStarPlanner()), run_episode(maze, BfsPlanner())
+            with self.subTest(maze=path.stem):
+                self.assertEqual(astar["status"], "success")
+                self.assertEqual(astar["steps"], bfs["steps"])
+                self.assertLessEqual(astar["expanded_nodes"], bfs["expanded_nodes"])
+
+    def test_unreachable_goal(self):
+        """目标被墙封闭时返回 None，运行记为 no_path。"""
+        maze = small_maze(blocked_edges=[[[1, 2], [2, 2]], [[2, 1], [2, 2]]])
+        self.assertIsNone(AStarPlanner().plan(maze))
+        self.assertEqual(run_episode(maze, AStarPlanner())["status"], "no_path")
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -34,20 +34,20 @@ git pull --no-rebase origin main
 
 ## 3. 上传本次工作
 
-以完成 DFS 为例，先检查差异，只暂存自己的文件。以下路径按实际修改替换，不要盲目复制尚未存在的文件名。
+以新增一个扩展算法为例，先检查差异，只暂存自己的文件。以下路径按实际修改替换，不要盲目复制尚未存在的文件名。
 
 ```bash
 git status
 git diff
-git add src/dfs.py
+git add src/ext/algorithms/turn_weighted_astar.py tests/test_ext/test_turn_weighted_astar.py
 git diff --cached
-git commit -m "实现 DFS 探索与实际移动回溯"
+git commit -m "E3：实现转弯加权 A*"
 git pull --no-rebase origin main
 git push origin main
 git status
 ```
 
-提交前确认没有密码、令牌、缓存、虚拟环境或无关文件。文档放到 `Docs/`；地图放 `mazes/classic/`，数据和图表放 `results/`。README 任务状态更新也需要明确暂存和提交。完成后到 GitHub 页面检查文件和提交记录。
+提交前确认没有密码、令牌、缓存、虚拟环境或无关文件。文件按层放置：基础规则已冻结（`src/basic/`、`results/basic/`、`Docs/basic/`，只修 bug），新工作放扩展层（`src/ext/`、`results/ext/`、`Docs/ext/`、`tests/test_ext/`），公共接口 `src/core/` 修改须向后兼容；地图放 `mazes/classic/`；自选实验输出在 `results/local/`，不提交。README 任务状态更新也需要明确暂存和提交。完成后到 GitHub 页面检查文件和提交记录。
 
 ## 4. 推送被拒绝怎么办
 

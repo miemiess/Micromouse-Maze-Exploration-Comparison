@@ -1,6 +1,6 @@
 # 可视化工具
 
-桌面应用（PySide6），用于实时运行算法、多算法同屏对比、编辑地图，以及导出报告用的 PNG 和 GIF。应用不自己运行算法：发现、驱动和统计全部来自 `src/algorithm_api.py`（与批量实验共用），由它驱动 `src/environment.py` 的 `MazeEnvironment` 和 `src/` 中的真实算法，界面上的步数、转向、重复访问等统计就是环境实际记录的结果，与实验规则一致。
+桌面应用（PySide6），用于实时运行算法、多算法同屏对比、编辑地图，以及导出报告用的 PNG 和 GIF。应用不自己运行算法：发现、驱动和统计全部来自 `src/core/algorithm_api.py`（与批量实验共用），由它驱动 `src/core/environment.py` 的 `MazeEnvironment` 和 `src/` 中的真实算法，界面上的步数、转向、重复访问等统计就是环境实际记录的结果，与实验规则一致。
 
 ## 准备
 
@@ -45,9 +45,9 @@ python tools/MazesTest/maze_app.py mazes/classic/external_uk2011f.json
 - "检查"区域显示地图是否有效、目标是否可达。目标不可达的地图仍可保存，用于无路测试。
 - "保存到地图库"、"导出…"的规则同上。保存的文件就是项目 JSON 格式，可以直接用于实验。外部迷宫库地图受只读保护；自己的地图修改后会原地覆盖，正式实验前请在结果中记录所用地图文件和提交号。编辑后切到运行页或对比页，会自动用新地图重新开始。
 
-**批量实验**：勾选多张地图（筛选框，以及“外部迷宫库 / 生成迷宫 / 核心 3 张”快捷按钮）和多个算法，设置种子、重复次数、预算，点“运行并导出”。不显示动画，分批运行、界面保持响应，可随时停止（已完成部分照常导出）。结果写入 `results/batch-<时间>/`：`runs.csv`、`summary.csv`、`summary.md`、`metadata.json`、`figures/`，并在页面下方显示汇总表。运行与导出调用 `src/run_experiments.py`，与命令行完全一致；正式实验规则见 `Docs/experiment-plan.md`。
+**批量实验**：勾选多张地图（筛选框，以及“外部迷宫库 / 生成迷宫 / 核心 3 张”快捷按钮）和多个算法，设置种子、重复次数、预算，点“运行并导出”。不显示动画，分批运行、界面保持响应，可随时停止（已完成部分照常导出）。结果写入 `results/local/batch-<时间>/`：`runs.csv`、`summary.csv`、`summary.md`、`metadata.json`、`figures/`，并在页面下方显示汇总表。运行与导出调用 `src/run_experiments.py`，与命令行完全一致；正式实验规则见 `Docs/basic/experiment-plan.md`。
 
-**新算法**：在 `src/` 中新建文件，按 `src/algorithm_api.py` 的接口写一个类（说明见 `src/README.md`“统一接口文件”一节），重启应用后会按类别自动出现在对应页面，不需要改动上位机。
+**新算法**：在 `src/ext/algorithms/` 中新建文件（基础层 `src/basic/algorithms/` 已冻结），按 `src/core/algorithm_api.py` 的接口写一个类（说明见 `src/README.md`“公共接口”一节），扩展算法在列表说明中带 `[EXT]` 标记，重启应用后会按类别自动出现在对应页面，不需要改动上位机。
 
 ## 命令行：批量生成地图
 
@@ -59,7 +59,7 @@ python tools/MazesTest/maze_app.py --generate backtracker wilson prim kruskal --
 
 ## 命令行批量导出
 
-不打开窗口，默认输出到 `results/figures/`：
+不打开窗口，默认输出到 `results/local/figures/`：
 
 ```
 python tools/MazesTest/maze_app.py --export "mazes/classic/*.json"                       # 每张地图一张 PNG
@@ -85,13 +85,13 @@ def debug_view(self) -> dict:
 
 - 该方法在每次 `choose_direction` 之后调用，不计入策略计算时间；不实现也能正常运行，只是不显示这些内容。
 - 它目前是可视化工具的可选扩展，还不是 `src/README.md` 中的公共接口；需要成为正式约定时，先在 Issue 中讨论。
-- 写法可以参考 `src/dfs.py` 和 `src/flood_fill.py`。
+- 写法可以参考 `src/basic/algorithms/dfs.py` 和 `src/basic/algorithms/flood_fill.py`。
 
 ## 文件结构
 
 | 文件 | 职责 |
 | --- | --- |
-| `simulation.py` | 与 `src/algorithm_api.py` 的连接层：转出算法发现、`Runner`、`Snapshot` 等，另提供画墙用的几何函数 |
+| `simulation.py` | 与 `src/core/algorithm_api.py` 的连接层：转出算法发现、`Runner`、`Snapshot` 等，另提供画墙用的几何函数 |
 | `maze_document.py` | 地图编辑模型与地图库（不依赖界面库）：改墙、设起点和目标、检查、随机生成、读写 JSON；`MapLibrary` 负责导入验证、存入地图库和外部迷宫只读保护 |
 | `app/maze_view.py` | 迷宫画布：用 QPainter 绘制地图和运行状态，编辑模式下响应点击 |
 | `app/tabs.py` | 三个功能页，以及共用的运行控制器、控制面板、显示选项 |
