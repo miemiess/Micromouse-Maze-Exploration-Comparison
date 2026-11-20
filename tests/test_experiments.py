@@ -51,7 +51,7 @@ class ExperimentTests(unittest.TestCase):
         self.assertEqual(len(rows), 2 * 3 * 2)
         for row in rows:
             self.assertTrue(row["consistent"])
-            self.assertEqual(row["map_group"], "competition")
+            self.assertEqual(row["map_group"], "external")
             if row["status"] == "success":
                 self.assertAlmostEqual(row["ratio"], row["steps"] / row["shortest"], places=3)
             else:
@@ -88,7 +88,7 @@ class ExperimentTests(unittest.TestCase):
         self.assertEqual(missing, [])
         maze = Maze.from_json(ROOT / "mazes" / "classic" / "gen_wilson_16x16_s3_l30.json")
         self.assertEqual(map_group(maze), "wilson_loop30")
-        self.assertEqual(map_group(Maze.from_json(ROOT / "mazes" / "classic" / "gen_16x16_s1.json")),
+        self.assertEqual(map_group(Maze.from_json(ROOT / "mazes" / "classic" / "gen_backtracker_16x16_s1.json")),
                          "backtracker_loop0")
 
     def test_command_line(self):

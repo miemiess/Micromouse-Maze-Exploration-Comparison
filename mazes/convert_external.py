@@ -128,7 +128,7 @@ def import_batch(source_dir: Path, revision: str, out: Path = OUT) -> tuple[list
         imported.append(source.name)
 
     lines = [
-        "# 导入的比赛迷宫（classic）", "",
+        "# 外部迷宫库（classic）", "",
         "来源：[micromouseonline/micromouse_maze_tool](https://github.com/micromouseonline/micromouse_maze_tool)"
         f" `mazefiles/binary/`，提交 `{revision}`，MIT 许可证（原文见 `../EXTERNAL_LICENSE.txt`）。"
         "由 `mazes/convert_external.py --batch` 自动导入，未手工修改墙壁"

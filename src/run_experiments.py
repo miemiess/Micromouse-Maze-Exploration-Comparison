@@ -49,13 +49,13 @@ SUMMARY_FIELDS = ["map_group", "algorithm", "experiment_mode", "runs", "success"
 # ====================================================================== 地图与分组
 
 def map_group(maze: Maze) -> str:
-    """地图分组：比赛迷宫为 competition；生成迷宫为 <生成算法>_loop<环路百分比>；其他为 other。"""
+    """地图分组：外部迷宫库（external_*）为 external；生成迷宫为 <生成算法>_loop<环路百分比>；其他为 other。"""
     meta = maze.metadata or {}
     if meta.get("source") == "generated":
         generator = meta.get("generator", "unknown").replace("recursive_", "")
         return f"{generator}_loop{round(float(meta.get('loop_fraction', 0)) * 100)}"
     if maze.maze_id.startswith("external_"):
-        return "competition"
+        return "external"
     return "other"
 
 
@@ -342,7 +342,7 @@ def plot_all(result_dir: Path) -> list[Path]:
     explore = [r for r in rows if r["experiment_mode"] == "unknown_exploration"]
     known = [r for r in rows if r["experiment_mode"] == "known_map_planning"]
     groups = sorted({r["map_group"] for r in rows if r["map_group"] != "ALL"},
-                    key=lambda g: (g != "competition", g))
+                    key=lambda g: (g != "external", g))
     written = []
 
     def save(fig, name):
@@ -408,7 +408,7 @@ def plan_generated_names() -> list[str]:
     """实验计划规定的 120 张生成地图的文件名（命名规则见 maze_document.generate）。"""
     names = []
     for generator in PLAN_GENERATORS:
-        prefix = "gen" if generator == "backtracker" else f"gen_{generator}"
+        prefix = f"gen_{generator}"
         for loop in PLAN_LOOPS:
             for seed in PLAN_SEEDS:
                 names.append(f"{prefix}_16x16_s{seed}" + (f"_l{loop}" if loop else "") + ".json")
@@ -418,7 +418,7 @@ def plan_generated_names() -> list[str]:
 def standard_plan() -> list[ExperimentRun]:
     """Docs/experiment-plan.md 中的标准实验：实验 1（主对比）与实验 2（随机性）。
 
-    地图明确列出：全部比赛迷宫（external_*）+ 计划规定的 120 张生成地图；
+    地图明确列出：外部迷宫库全部地图（external_*）+ 计划规定的 120 张生成地图；
     地图库中其他地图（例如手工编辑保存的）不会混入。
 
     Raises:

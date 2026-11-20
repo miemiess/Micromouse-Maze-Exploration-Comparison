@@ -217,7 +217,7 @@ class MazeEnvironment:
         """由外部执行器记录无路、超时或异常等结束状态。
 
         Args:
-            status: "no_path"、"timeout" 或 "error"。
+            status: "no_path"、"loop_detected"、"timeout" 或 "error"。
 
         Raises:
             RuntimeError: 运行已经结束。
@@ -225,7 +225,7 @@ class MazeEnvironment:
         """
         if self.status != "running":
             raise RuntimeError("run has already ended")
-        if status not in {"no_path", "timeout", "error"}:
+        if status not in {"no_path", "loop_detected", "timeout", "error"}:
             raise ValueError("invalid externally supplied status")
         self.status = status
 

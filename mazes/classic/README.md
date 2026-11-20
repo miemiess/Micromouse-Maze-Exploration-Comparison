@@ -1,4 +1,4 @@
-# 导入的比赛迷宫（classic）
+# 外部迷宫库（classic）
 
 来源：[micromouseonline/micromouse_maze_tool](https://github.com/micromouseonline/micromouse_maze_tool) `mazefiles/binary/`，提交 `12118e413f6be8341ea7f64c100e7625178cd6dc`，MIT 许可证（原文见 `../EXTERNAL_LICENSE.txt`）。由 `mazes/convert_external.py --batch` 自动导入，未手工修改墙壁（其中 1stworld、japan2017ef、uk2011f 三张最早由 A3 用同一脚本逐张整理，为缩进格式）。
 

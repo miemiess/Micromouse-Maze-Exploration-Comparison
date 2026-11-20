@@ -35,7 +35,7 @@ def run(maze: Maze, strategy) -> dict:
     while env.status == "running":
         direction = strategy.choose_direction(observation)
         if direction is None:
-            env.finish("no_path")
+            env.finish("loop_detected" if getattr(strategy, "loop_detected", False) else "no_path")
             break
         observation = env.step(direction).observation
     return env.summary()
@@ -108,14 +108,15 @@ class WallFollowerTests(unittest.TestCase):
         self.assertEqual((summary["status"], summary["steps"]), ("success", 4))
 
     def test_detects_loop_when_goal_is_an_island(self):
-        """中央目标不与外墙相连：左右手法都绕外圈一周后判定循环，返回 no_path。"""
+        """中央目标不与外墙相连：左右手法都绕外圈一周后判定循环，记为 loop_detected。"""
         maze = small_maze(goals=[[1, 1]])
         for cls in (LeftWallFollower, RightWallFollower):
             with self.subTest(strategy=cls.name):
                 strategy = cls()
                 summary = run(maze, strategy)
-                self.assertEqual(summary["status"], "no_path")
+                self.assertEqual(summary["status"], "loop_detected")
                 self.assertTrue(strategy.loop_detected)
+                self.assertEqual(run_episode(maze, cls())["status"], "loop_detected")
                 self.assertNotIn((1, 1), summary["path"])
 
     def test_always_terminates_on_external_mazes(self):
@@ -125,7 +126,7 @@ class WallFollowerTests(unittest.TestCase):
             for cls in (LeftWallFollower, RightWallFollower):
                 with self.subTest(maze=path.stem, strategy=cls.name):
                     summary = run(maze, cls())
-                    self.assertIn(summary["status"], {"success", "no_path"})
+                    self.assertIn(summary["status"], {"success", "loop_detected"})
                     self.assertLessEqual(summary["steps"], 4 * maze.width * maze.height)
 
 

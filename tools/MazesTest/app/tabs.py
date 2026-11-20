@@ -30,6 +30,7 @@ FIGURE_DIR = ROOT / "results" / "figures"
 SPEEDS = [1, 2, 4, 8, 15, 30, 60, 120, 300, 1000]
 
 STATUS_TEXT = {"running": "运行中", "success": "到达目标", "no_path": "无路可走",
+               "loop_detected": "陷入循环",
                "budget_exceeded": "超出步数预算", "timeout": "计算超时",
                "invalid_action": "非法动作", "error": "策略异常"}
 

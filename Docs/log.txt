@@ -22,3 +22,4 @@ Luca 2026-11-19 批量导入功能合并进 mazes/convert_external.py（--batch�
 Luca 2026-11-19 完成 D1（Docs/experiment-plan.md）、D2（src/run_experiments.py、src/plot_results.py、上位机批量实验页、120 张计划生成地图、results/standard 正式结果）、D3（Docs/demo-guide.md、results/demo 演示图、计时范围测试）
 Luca 2026-11-19 画图功能合并进 src/run_experiments.py（--plot 从 CSV 重画），删除 plot_results.py
 Luca 2026-11-19 matplotlib 改为必需依赖：run_experiments.py 直接导入，去掉未安装时的兼容分支与测试跳过
+Luca 2026-11-19 Result.md 第 2 章更新为正式实验结果（514 张地图），更新摘要、局限与复现方式

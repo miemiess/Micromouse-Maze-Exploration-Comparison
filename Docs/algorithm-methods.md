@@ -9,7 +9,7 @@
   - **未知地图探索**（`EXPLORE`）：每到一格只获得该格四个方向是否有墙（理想观测），通过 `choose_direction` 逐步决定方向；
   - **已知地图规划**（`KNOWN_MAP`）：通过 `plan(maze)` 一次拿到完整地图，返回整条路径，作为参照。两类分开实验、分开比较。
 - **代价**：一次跨格移动算 1 步；转向单独计数，180° 记为两次 90°。基础规则下每一步代价相同。
-- **终止状态**：`success`（到达任一目标）、`no_path`（算法返回 None）、`budget_exceeded`（默认 20 × 格子数步）、`timeout`（累计计算超过 30 秒）、`invalid_action`、`error`。
+- **终止状态**：`success`（到达任一目标）、`no_path`（算法返回 None）、`loop_detected`（算法返回 None 且判定陷入循环，目前只有沿墙法）、`budget_exceeded`（默认 20 × 格子数步）、`timeout`（累计计算超过 30 秒）、`invalid_action`、`error`。
 - **统一驱动**：所有算法都由 `Runner` / `run_episode` 驱动 `MazeEnvironment` 执行，只对算法自身的 `reset` / `plan` / `choose_direction` 计时，统计口径完全一致。
 
 ## 2. 算法登记表

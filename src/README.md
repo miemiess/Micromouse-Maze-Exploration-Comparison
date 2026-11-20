@@ -205,7 +205,8 @@ class Strategy(Protocol):
 - 返回值是绝对方向，不是左转、右转等相对动作；环境统一换算转弯次数。
 - 策略每次只能决定跨向一个相邻格，不能一次返回整条路径让电脑鼠瞬移。
 - DFS 回溯也必须逐格返回并调用相同接口，回溯移动计入步数。
-- `None` 表示策略根据自身已知信息声明无法继续，运行状态记为 `no_path`。
+- `None` 表示策略根据自身已知信息声明无法继续，运行状态记为 `no_path`；若策略返回 `None` 前把
+  属性 `loop_detected` 设为 `True`（例如沿墙法判定陷入循环），则记为 `loop_detected`。
 - 策略不得修改传入的观测，也不得通过私有属性引用环境或真值地图。
 - `reset` 后同一个策略对象可以安全地用于下一张地图或下一次重复实验。
 
@@ -252,6 +253,7 @@ class StepResult:
 | `running` | 尚未结束 |
 | `success` | 到达任意目标格 |
 | `no_path` | 策略返回 `None`，声明无法继续 |
+| `loop_detected` | 策略返回 `None` 且 `loop_detected` 为真：判定陷入循环（目标可能可达，只是该策略到不了） |
 | `budget_exceeded` | 达到移动预算仍未到达目标 |
 | `timeout` | 累计策略计算时间超过统一预算 |
 | `invalid_action` | 非法方向、越界或尝试穿墙 |
@@ -313,7 +315,7 @@ while env.status == "running":
         env.finish("timeout")
         break
     if direction is None:
-        env.finish("no_path")
+        env.finish("loop_detected" if getattr(strategy, "loop_detected", False) else "no_path")
         break
 
     result = env.step(direction)

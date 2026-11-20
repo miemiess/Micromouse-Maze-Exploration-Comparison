@@ -69,7 +69,7 @@ class BatchTab(QWidget):
         buttons = QHBoxLayout()
         for text, action in (("全选（可见）", lambda: self._check_visible(True)),
                              ("全不选", lambda: self._check(lambda name: False)),
-                             ("比赛迷宫", lambda: self._check(lambda n: n.startswith("external_"))),
+                             ("外部迷宫库", lambda: self._check(lambda n: n.startswith("external_"))),
                              ("生成迷宫", lambda: self._check(lambda n: n.startswith("gen_"))),
                              ("核心 3 张", lambda: self._check(lambda n: n in CORE_MAPS)),
                              ("刷新", self.reload_maps)):

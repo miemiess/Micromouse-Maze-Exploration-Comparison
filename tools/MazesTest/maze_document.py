@@ -5,7 +5,7 @@
 存入地图库（默认项目的 mazes/classic/ 目录）后即可供上位机和实验使用。
 随机生成的地图会在 metadata 中记录生成器和种子。
 
-外部迷宫只读：文件名以 external_ 开头的地图（A3 整理的比赛迷宫）永远不会被覆盖，
+外部迷宫只读：文件名以 external_ 开头的地图（A3 整理的外部迷宫库）永远不会被覆盖，
 修改后保存会自动另存为新地图，并在 metadata 中记录改自哪张地图。
 """
 
@@ -19,7 +19,7 @@ from simulation import DELTAS, Direction, Maze, maze_walls
 Cell = tuple[int, int]
 Edge = frozenset
 
-# 外部比赛迷宫的文件名前缀（见 mazes/README.md），这类文件只读。
+# 外部迷宫库的文件名前缀（见 mazes/README.md），这类文件只读。
 PROTECTED_PREFIX = "external_"
 
 
@@ -469,8 +469,8 @@ def generate(width: int, height: int, *, seed: int, loop_fraction: float = 0.0,
         width、height: 尺寸，至少 2 × 2。
         seed: 随机种子，记录在 metadata 中以便复现。
         loop_fraction: 生成后再拆掉剩余内部墙的比例（0~1）。
-        maze_id: 地图标识；默认递归回溯为 gen_<宽>x<高>_s<种子>[_l<比例>]，
-            其他算法为 gen_<算法>_<宽>x<高>_s<种子>[_l<比例>]。
+        maze_id: 地图标识；默认为 gen_<生成算法>_<宽>x<高>_s<种子>[_l<环路百分比>]，
+            例如 gen_backtracker_16x16_s1、gen_wilson_16x16_s3_l10。
         algorithm: 生成算法，GENERATORS 的键之一。
 
     Returns:
@@ -483,7 +483,7 @@ def generate(width: int, height: int, *, seed: int, loop_fraction: float = 0.0,
         raise ValueError(f"unknown generator {algorithm!r}; available: {', '.join(GENERATORS)}")
     rng = random.Random(seed)
     if maze_id is None:
-        prefix = "gen" if algorithm == "backtracker" else f"gen_{algorithm}"
+        prefix = f"gen_{algorithm}"
         maze_id = f"{prefix}_{width}x{height}_s{seed}" +             (f"_l{round(loop_fraction * 100)}" if loop_fraction else "")
     doc = MazeDocument(maze_id, width, height)
     doc.walls = set(all_edges(width, height))

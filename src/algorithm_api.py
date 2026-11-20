@@ -336,7 +336,7 @@ class Runner:
             snapshot = runner.step()
 
     规则与 src/README.md 的调用示例一致：只累计算法 reset / plan / choose_direction 的耗时，
-    超过 time_budget 记为 timeout；返回 None 记为 no_path；抛出异常记为 error。
+    超过 time_budget 记为 timeout；返回 None 记为 no_path（策略的 loop_detected 为真时记为 loop_detected）；抛出异常记为 error。
     debug_view() 不计时。
     """
 
@@ -428,7 +428,9 @@ class Runner:
             if self.compute_seconds > self.time_budget:
                 self.env.finish("timeout")
             elif direction is None:
-                self.env.finish("no_path")
+                # 策略可设 loop_detected = True，说明是判定陷入循环而不是确认无路
+                self.env.finish("loop_detected" if getattr(self.strategy, "loop_detected", False)
+                                else "no_path")
             else:
                 result = self.env.step(direction)
                 moved = result.moved

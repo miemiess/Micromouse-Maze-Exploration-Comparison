@@ -102,9 +102,12 @@ class RunnerTests(unittest.TestCase):
         self.assertEqual(runner.run().stats["steps"], first["steps"])
 
     def test_failure_statuses(self):
-        """无路、穿墙和异常分别记为 no_path、invalid_action、error。"""
+        """无路、循环、穿墙和异常分别记为 no_path、loop_detected、invalid_action、error。"""
         maze = Maze.from_json(MAZE)
         self.assertEqual(Runner(maze, Scripted()).run().status, "no_path")
+        looping = Scripted()
+        looping.loop_detected = True
+        self.assertEqual(Runner(maze, looping).run().status, "loop_detected")
         # 起点 (0, 0) 东侧有墙。
         snap = Runner(maze, Scripted([Direction.EAST])).run()
         self.assertEqual((snap.status, snap.blocked), ("invalid_action", ((0, 0), Direction.EAST)))
@@ -178,7 +181,10 @@ class DocumentTests(unittest.TestCase):
                 self.assertEqual(total_edges - len(doc.walls), width * height - 1)
                 self.assertEqual(doc.walls, generate(width, height, seed=5, algorithm=algorithm).walls)
                 self.assertEqual(doc.check(), ([], []))
-        self.assertEqual(generate(4, 4, seed=1).maze_id, "gen_4x4_s1")  # 递归回溯保持原命名
+        # 统一命名：gen_<生成算法>_<宽>x<高>_s<种子>[_l<环路百分比>]
+        self.assertEqual(generate(4, 4, seed=1).maze_id, "gen_backtracker_4x4_s1")
+        self.assertEqual(generate(4, 4, seed=1, loop_fraction=0.1).maze_id,
+                         "gen_backtracker_4x4_s1_l10")
         self.assertEqual(generate(4, 4, seed=1, algorithm="wilson").maze_id, "gen_wilson_4x4_s1")
         with self.assertRaises(ValueError):
             generate(4, 4, seed=1, algorithm="no_such_generator")
