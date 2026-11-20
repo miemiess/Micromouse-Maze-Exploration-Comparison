@@ -108,6 +108,7 @@ python tools/MazesTest/maze_app.py --generate backtracker wilson prim kruskal --
 python tools/MazesTest/maze_app.py --generate backtracker wilson prim kruskal --loops 0 10 30 --seeds 101 110   # C2 开发集
 python src/run_experiments.py --plan standard   # 全部实验（实验 1、2）
 python results/standard/dev/tune_dev.py         # C2 开发集调参记录（不属于实验）
+python results/standard/dev/posthoc_stratified.py  # 事后分析：按地图来源分层的开发集（不属于实验计划，结论不进入正式结果）
 ```
 
 **上位机**：打开“▦ 批量实验”页 → 勾选地图（可用筛选框和“外部迷宫库 / 生成迷宫 / 核心 3 张”按钮）→ 勾选算法 → 设置种子、重复次数 → 点“运行并导出”。结果写入 `results/batch-<时间>/`，文件格式与命令行相同。适合做小规模或自选的实验。
