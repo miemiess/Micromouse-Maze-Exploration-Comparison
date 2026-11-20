@@ -12,12 +12,13 @@
 | Q4 | 移动成本与计算成本是否一致？算法要算多久？ | 复杂度分析 | 实验 1：计算时间 |
 | Q5 | 已知地图时，启发式（A*）比 BFS 少搜多少？ | 复杂度分析、启发式 | 实验 1：扩展节点数 |
 | Q6 | 随机算法的结果波动有多大？ | 实验评估的可靠性 | 实验 2：随机游走多种子 |
+| Q7 | 本组提出的先验增强重复 A* 是否比重复 A* 少走路？每个机制各贡献多少？ | 算法设计、启发式、实验评估 | 实验 1：新方案与消融变体（调参只用开发集，见第 4 节） |
 
 ## 2. 实验一览
 
 | 实验 | 地图 | 算法 | 种子 | 重复 | 输出目录 |
 | --- | --- | --- | --- | --- | --- |
-| 实验 1：主对比 | 外部迷宫库 394 张 + 计划生成地图 120 张 = 514 张 | 全部 9 个 | 0 | 3 次（计时取中位数） | `results/standard/main/` |
+| 实验 1：主对比 | 外部迷宫库 394 张 + 计划生成地图 120 张 = 514 张 | 全部 13 个（第 4 节） | 0 | 3 次（计时取中位数） | `results/standard/main/` |
 | 实验 2：随机性 | 核心比赛迷宫 3 张（1stworld、japan2017ef、uk2011f） | 随机游走 | 0～9 | 1 次 | `results/standard/randomness/` |
 
 Q3 不需要单独的实验：实验 1 的结果按“地图组”拆开统计即可。
@@ -46,8 +47,18 @@ Q3 不需要单独的实验：实验 1 的结果按“地图组”拆开统计�
 | --- | --- |
 | 未知地图探索（参与比较） | `dfs`、`greedy_dfs`、`flood_fill`、`repeated_astar`、`wall_follower_left`、`wall_follower_right`、`random_walk` |
 | 已知地图规划（只作参照，不参与排名） | `bfs`、`astar` |
+| 未知地图探索：本组新方案（C2，参与比较） | `prior_astar`（完整版） |
+| 未知地图探索：新方案的消融变体（只用于消融分析，不进主图） | `prior_astar_no_post`（去掉柱子规则）、`prior_astar_no_penalty`（去掉未知边惩罚）、`prior_astar_fixed`（自适应惩罚换成固定 δ）；基线为 `repeated_astar` |
 
-算法规则与复杂度见 `Docs/algorithm-methods.md`。
+算法规则与复杂度见 `Docs/algorithm-methods.md`；新方案的设计见 `Docs/algorithm-design.md`。
+
+**C2 新方案的调参与冻结**（在看测试集结果之前确定）：
+
+- 只调一个参数：自适应惩罚系数 c（候选 0.5、1、1.5、2、2.5、3、4、5）；固定 δ 的消融变体另调 δ（候选 0、0.25、0.5、0.75、1、1.5、2、2.5、3）。
+- 选取标准：开发集 120 张地图上“步数 / 最短路”的**均值**最低；相差不到 0.001 时取较小的值。
+- 结果：c = 2.5，固定 δ = 2.5，写入 `src/prior_astar.py` 的 `FROZEN_SCALE`、`FROZEN_FIXED` 后冻结；测试集结果出来后不再修改。
+- 柱子规则没有可调参数，规则本身来自比赛规程，不来自数据。
+- 新方案与消融变体和其他算法一起在实验 1 中运行（同一批地图、同一次运行、同一计时口径）；开发集只用于调参，不属于任何实验，其唯一记录是 `results/standard/dev/`（`tuning.md` 与复现脚本 `tune_dev.py`）。
 
 ## 5. 统一规则
 
@@ -84,7 +95,7 @@ Q3 不需要单独的实验：实验 1 的结果按“地图组”拆开统计�
 | `runs.csv` | 原始数据，每次运行一行 |
 | `summary.csv` / `summary.md` | 按（地图组, 算法）汇总，另有 `ALL` 表示全部地图 |
 | `metadata.json` | 代码提交号、Python 版本、平台、设置、开始与结束时间 |
-| `figures/` | `ratio_by_group.png`、`success_by_group.png`、`compute_time.png`、`expanded_nodes.png` |
+| `figures/` | `ratio_by_group.png`、`success_by_group.png`、`compute_time.png`、`expanded_nodes.png`；实验 1 另有 `ablation.png`（C2 消融） |
 
 图表随时可以从 CSV 重新生成：`python src/run_experiments.py --plot results/standard/main`。
 
@@ -94,7 +105,9 @@ Q3 不需要单独的实验：实验 1 的结果按“地图组”拆开统计�
 
 ```bash
 python tools/MazesTest/maze_app.py --generate backtracker wilson prim kruskal --loops 0 10 30 --seeds 1 10
-python src/run_experiments.py --plan standard
+python tools/MazesTest/maze_app.py --generate backtracker wilson prim kruskal --loops 0 10 30 --seeds 101 110   # C2 开发集
+python src/run_experiments.py --plan standard   # 全部实验（实验 1、2）
+python results/standard/dev/tune_dev.py         # C2 开发集调参记录（不属于实验）
 ```
 
 **上位机**：打开“▦ 批量实验”页 → 勾选地图（可用筛选框和“外部迷宫库 / 生成迷宫 / 核心 3 张”按钮）→ 勾选算法 → 设置种子、重复次数 → 点“运行并导出”。结果写入 `results/batch-<时间>/`，文件格式与命令行相同。适合做小规模或自选的实验。
@@ -109,3 +122,4 @@ python src/run_experiments.py --plan standard
 | --- | --- | --- |
 | 2026-11-19 | 初版 | — |
 | 2026-11-20 | ① 地图组 `competition` 改名为 `external`，报告中称“外部迷宫库”；② 递归回溯生成地图由 `gen_16x16_*` 改名为 `gen_backtracker_16x16_*`（墙壁不变）；③ 新增终止状态 `loop_detected`，沿墙法判定循环时不再记为 `no_path`。已重新运行全部实验 | ① 该组含测试 / 练习图，不全是真实比赛迷宫；② 四种生成器命名统一；③ 区分“陷入循环”与“声明无路” |
+| 2026-11-20 | C2 新方案 `prior_astar` 及 3 个消融变体加入实验 1（算法 9 → 13 个，代码中固定列出为 `MAIN_ALGORITHMS`）；开发集（种子 101～110）只用于调参，记录在 `results/standard/dev/`，不作为实验运行；消融变体不进主图，另画 `ablation.png`。已重新运行全部实验 | C1 / C2；新方案与全部算法在同一次运行中比较，计时口径一致 |

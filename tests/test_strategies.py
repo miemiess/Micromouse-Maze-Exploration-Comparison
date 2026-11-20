@@ -1,4 +1,4 @@
-"""src/ 中各算法的验证：DFS、贪心 DFS、Flood-Fill、重复 A*、沿墙法、随机游走（探索），
+"""src/ 中各算法的验证：DFS、贪心 DFS、Flood-Fill、重复 A*、先验增强重复 A*、沿墙法、随机游走（探索），
 BFS、A*（已知地图规划）。
 
 探索算法只依赖观测、能到达目标或正确判定无路、结果可复现；BFS 给出最短路参照。
@@ -14,9 +14,11 @@ from algorithm_api import run_episode  # noqa: E402
 from astar import AStarPlanner  # noqa: E402
 from bfs import BfsPlanner  # noqa: E402
 from dfs import DfsStrategy  # noqa: E402
-from environment import Maze, MazeEnvironment  # noqa: E402
+from environment import Direction, Maze, MazeEnvironment, Observation  # noqa: E402
 from flood_fill import FloodFillStrategy  # noqa: E402
 from greedy_dfs import GreedyDfsStrategy  # noqa: E402
+from prior_astar import (PriorAStarFixedPenalty, PriorAStarNoPenalty,  # noqa: E402
+                         PriorAStarNoPostRule, PriorAStarStrategy, _PriorAStar)
 from random_walk import RandomWalkStrategy  # noqa: E402
 from repeated_astar import RepeatedAStarStrategy  # noqa: E402
 from wall_follower import LeftWallFollower, RightWallFollower  # noqa: E402
@@ -50,7 +52,9 @@ def small_maze(**changes) -> Maze:
 
 
 class StrategyTests(unittest.TestCase):
-    STRATEGIES = (DfsStrategy, GreedyDfsStrategy, FloodFillStrategy, RepeatedAStarStrategy)
+    STRATEGIES = (DfsStrategy, GreedyDfsStrategy, FloodFillStrategy, RepeatedAStarStrategy,
+                  PriorAStarStrategy, PriorAStarNoPostRule, PriorAStarNoPenalty,
+                  PriorAStarFixedPenalty)
 
     def test_reach_goal_on_external_mazes(self):
         """两种策略在三张比赛迷宫上都能在预算内到达目标，路径为逐格真实移动。"""
@@ -192,6 +196,76 @@ class RepeatedAStarTests(unittest.TestCase):
                 self.assertEqual(summary["status"], "success")
                 self.assertLess(strategy.replans, summary["steps"])
                 self.assertGreater(strategy.expanded_total, 0)
+
+
+class _BothOff(_PriorAStar):
+    """两个机制都关闭的先验增强 A*，应与重复 A* 完全相同。"""
+    name = "prior_astar_off"
+    use_post_rule = False
+    unknown_penalty = 0.0
+
+
+def observation(cell, walls):
+    """构造一次观测（walls 为方向字母，如 "SW"）。"""
+    return Observation(cell, Direction.NORTH, frozenset(Direction(w) for w in walls), 0)
+
+
+class PriorAStarTests(unittest.TestCase):
+    def fresh(self, cls=PriorAStarStrategy, size=3, goals=frozenset({(2, 2)})):
+        strategy = cls()
+        strategy.reset(width=size, height=size, start=(0, 0), goals=goals,
+                       initial_heading=Direction.NORTH)
+        return strategy
+
+    def test_both_mechanisms_off_equals_repeated_astar(self):
+        """两个机制都关闭时，每张地图上的路线与重复 A* 逐格相同（消融的基准）。"""
+        for maze in [Maze.from_json(p) for p in EXTERNAL] + [small_maze()]:
+            with self.subTest(maze=maze.maze_id):
+                self.assertEqual(run_episode(maze, _BothOff())["path"],
+                                 run_episode(maze, RepeatedAStarStrategy())["path"])
+
+    def test_post_rule_infers_fourth_edge(self):
+        """柱子 (1, 1) 的 3 条边确认无墙后，推断第 4 条 (0,1)-(1,1) 为墙。"""
+        strategy = self.fresh()
+        strategy._observe(observation((0, 0), "SW"))   # 北、东无墙
+        self.assertEqual(strategy.inferred_total, 0)
+        strategy._observe(observation((1, 0), "S"))    # 西、北、东无墙
+        self.assertIn(frozenset({(0, 1), (1, 1)}), strategy._inferred)
+        self.assertTrue(strategy.post_rule_active)
+
+    def test_post_rule_disables_itself_when_violated(self):
+        """观测推翻软墙（柱子四边都无墙），说明本图不守规则：清空软墙并关闭机制。"""
+        strategy = self.fresh()
+        strategy._observe(observation((0, 0), "SW"))
+        strategy._observe(observation((1, 0), "S"))
+        strategy._observe(observation((0, 1), "W"))    # (0,1)-(1,1) 实际无墙
+        self.assertFalse(strategy.post_rule_active)
+        self.assertEqual(strategy._inferred, set())
+        self.assertTrue(strategy.stats()["post_rule_disabled"])
+
+    def test_goal_centre_post_is_exempt(self):
+        """2×2 目标区中心的柱子不受规则约束（比赛规则的例外）。"""
+        goals = frozenset({(1, 1), (1, 2), (2, 1), (2, 2)})
+        strategy = self.fresh(size=4, goals=goals)
+        self.assertIsNone(strategy._post_edges(2, 2))
+        self.assertIsNotNone(strategy._post_edges(1, 1))
+        self.assertIsNone(strategy._post_edges(0, 2))  # 外边界上的柱子
+
+    def test_wrong_inference_never_causes_failure(self):
+        """没有内部墙的开阔地图处处违反柱子规则，完整版仍然到达目标。"""
+        maze = small_maze(width=5, height=5, goals=[[4, 4]])
+        summary = run_episode(maze, PriorAStarStrategy())
+        self.assertEqual((summary["status"], summary["steps"]), ("success", 8))
+
+    def test_adaptive_penalty_follows_wall_density(self):
+        """δ = c · p / (1 − p)，p 为平滑后的墙比例；尚无观测时 p = 1/2，δ = c。"""
+        strategy = self.fresh()
+        self.assertAlmostEqual(strategy.current_penalty(), PriorAStarStrategy.penalty_scale)
+        strategy._observe(observation((0, 0), "SW"))  # 0 面内部墙、2 条通路
+        p = 1 / 4
+        self.assertAlmostEqual(strategy.current_penalty(),
+                               PriorAStarStrategy.penalty_scale * p / (1 - p))
+        self.assertEqual(self.fresh(PriorAStarNoPenalty).current_penalty(), 0.0)
 
 
 class AStarPlannerTests(unittest.TestCase):

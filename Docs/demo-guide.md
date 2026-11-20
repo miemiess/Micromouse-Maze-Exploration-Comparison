@@ -26,7 +26,7 @@ pip install -r requirements.txt   # PySide6（上位机）与 matplotlib（图�
 | 从 CSV 重画图表 | `python src/run_experiments.py --plot results/standard/main` |
 | 导出演示图片 / GIF | `python tools/MazesTest/maze_app.py --export mazes/classic/external_uk2011f.json --strategy flood_fill --gif -o results/demo` |
 
-标准实验在一台普通笔记本上约需数分钟（514 张地图 × 9 个算法 × 3 次重复）。
+标准实验在一台普通笔记本上约需数分钟（514 张地图 × 13 个算法 × 3 次重复，另加 C2 开发集）。
 
 ## 3. 代表性演示
 
@@ -57,7 +57,6 @@ pip install -r requirements.txt   # PySide6（上位机）与 matplotlib（图�
 
 | 目录 | 内容 |
 | --- | --- |
-| `results/standard/` | 按实验计划运行的正式结果（`main/`、`randomness/`） |
-| `results/preliminary/` | 早期初步实验（`Docs/Result.md` 初稿使用，存在生成器偏差，见发现 6） |
+| `results/standard/` | 按实验计划运行的正式结果（`main/`、`randomness/`；开发集调参记录在 `dev/`） |
 | `results/demo/` | 演示用图片与 GIF |
 | `results/batch-<时间>/` | 上位机批量实验页的自选实验 |

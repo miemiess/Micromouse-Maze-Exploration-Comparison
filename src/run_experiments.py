@@ -274,7 +274,7 @@ PALETTE = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6
 ALGORITHM_COLORS = {
     "flood_fill": PALETTE[0], "repeated_astar": PALETTE[1], "dfs": PALETTE[2],
     "greedy_dfs": PALETTE[3], "wall_follower_left": PALETTE[4], "wall_follower_right": PALETTE[5],
-    "random_walk": PALETTE[6], "bfs": PALETTE[0], "astar": PALETTE[1],
+    "random_walk": PALETTE[6], "prior_astar": PALETTE[7], "bfs": PALETTE[0], "astar": PALETTE[1],
 }
 INK, MUTED, GRID, SURFACE = "#0b0b0b", "#898781", "#e6e5e1", "#fcfcfb"
 # 已知地图算法只是参照，与探索算法同图出现时用中性灰，避免与探索算法撞色。
@@ -311,8 +311,8 @@ def _style(ax, title: str, ylabel: str) -> None:
     ax.tick_params(colors=INK, labelsize=9)
 
 
-def _grouped_bars(ax, groups: list[str], algorithms: list[str], value) -> None:
-    """分组柱状图：每个地图组一簇，每个算法一根；缺失值不画。"""
+def _grouped_bars(ax, groups: list[str], algorithms: list[str], value, colors=None) -> None:
+    """分组柱状图：每个地图组一簇，每个算法一根；缺失值不画。colors 不给时用算法的固定颜色。"""
     width = 0.8 / max(1, len(algorithms))
     for i, algorithm in enumerate(algorithms):
         xs, ys = [], []
@@ -321,7 +321,7 @@ def _grouped_bars(ax, groups: list[str], algorithms: list[str], value) -> None:
             if v is not None:
                 xs.append(g - 0.4 + width * (i + 0.5))
                 ys.append(v)
-        ax.bar(xs, ys, width=width * 0.9, color=_color(algorithm, i), label=algorithm,
+        ax.bar(xs, ys, width=width * 0.9, color=colors[i] if colors else _color(algorithm, i), label=algorithm,
                edgecolor=SURFACE, linewidth=1)
     ax.set_xticks(range(len(groups)), groups, rotation=20, ha="right")
     ax.legend(frameon=False, fontsize=8, ncols=min(4, len(algorithms)), loc="upper left")
@@ -330,6 +330,7 @@ def _grouped_bars(ax, groups: list[str], algorithms: list[str], value) -> None:
 def plot_all(result_dir: Path) -> list[Path]:
     """根据 summary.csv 生成全部图表（写入 <结果目录>/figures/），返回写出的文件。
 
+    消融变体（ABLATION_VARIANTS）不进主图，另画 ablation.png。
     生成：ratio_by_group.png（各地图组的平均“步数 / 最短路”，对数坐标）、success_by_group.png（成功率）、
     compute_time.png（各算法计算时间中位数）、expanded_nodes.png（已知地图算法的扩展节点数）。
     图中文字使用英文，避免默认字体缺少中文字形；数值表见同目录 summary.md。
@@ -339,7 +340,8 @@ def plot_all(result_dir: Path) -> list[Path]:
     out = result_dir / "figures"
     out.mkdir(exist_ok=True)
     lookup = {(r["map_group"], r["algorithm"]): r for r in rows}
-    explore = [r for r in rows if r["experiment_mode"] == "unknown_exploration"]
+    explore = [r for r in rows if r["experiment_mode"] == "unknown_exploration"
+               and r["algorithm"] not in ABLATION_VARIANTS]
     known = [r for r in rows if r["experiment_mode"] == "known_map_planning"]
     groups = sorted({r["map_group"] for r in rows if r["map_group"] != "ALL"},
                     key=lambda g: (g != "external", g))
@@ -372,7 +374,7 @@ def plot_all(result_dir: Path) -> list[Path]:
         _style(ax, "Success rate within budget", "success rate")
         save(fig, "success_by_group.png")
 
-    everyone = [r for r in rows if r["map_group"] == "ALL"]
+    everyone = [r for r in rows if r["map_group"] == "ALL" and r["algorithm"] not in ABLATION_VARIANTS]
     if everyone:
         everyone.sort(key=lambda r: r["median_compute_ms"] or 0)
         fig, ax = plt.subplots(figsize=(7, 0.45 * len(everyone) + 1.5))
@@ -393,6 +395,18 @@ def plot_all(result_dir: Path) -> list[Path]:
                       lambda g, a: (lookup.get((g, a)) or {}).get("mean_expanded_nodes"))
         _style(ax, "Known-map planners: nodes expanded (same shortest length)", "expanded nodes")
         save(fig, "expanded_nodes.png")
+
+    ablation = [a for a in ["repeated_astar", *ABLATION_VARIANTS, "prior_astar"]
+                if any(r["algorithm"] == a for r in rows)]
+    if any(a in ABLATION_VARIANTS for a in ablation):
+        # 单独一张图，颜色按本图内顺序取色板（与主图的颜色无关）。
+        fig, ax = plt.subplots(figsize=(max(7, 1.3 * len(groups) + 3), 4.5))
+        _grouped_bars(ax, groups, ablation,
+                      lambda g, a: (lookup.get((g, a)) or {}).get("mean_ratio"),
+                      colors=[PALETTE[i] for i in range(len(ablation))])
+        ax.axhline(1, color=MUTED, linewidth=1, linestyle="--")
+        _style(ax, "C2 ablation: steps / shortest path (mean; baseline = repeated_astar)", "ratio")
+        save(fig, "ablation.png")
     return written
 
 
@@ -402,39 +416,52 @@ def plot_all(result_dir: Path) -> list[Path]:
 PLAN_GENERATORS = ("backtracker", "wilson", "prim", "kruskal")
 PLAN_LOOPS = (0, 10, 30)
 PLAN_SEEDS = range(1, 11)
+DEV_SEEDS = range(101, 111)  # 开发集：只用于 C2 新方案调参（results/standard/dev/tune_dev.py），不进入任何实验
+# C2 新方案的消融变体：与其他算法同在实验 1 中运行，但只出现在消融图表中，不进主图。
+ABLATION_VARIANTS = ["prior_astar_no_penalty", "prior_astar_no_post", "prior_astar_fixed"]
+# 实验 1 的 13 个算法（固定列出，新增算法文件不会改变实验 1）。
+MAIN_ALGORITHMS = ["astar", "bfs", "dfs", "flood_fill", "greedy_dfs", "random_walk",
+                   "repeated_astar", "wall_follower_left", "wall_follower_right",
+                   "prior_astar", *ABLATION_VARIANTS]
 
 
-def plan_generated_names() -> list[str]:
-    """实验计划规定的 120 张生成地图的文件名（命名规则见 maze_document.generate）。"""
+def plan_generated_names(seeds=PLAN_SEEDS) -> list[str]:
+    """实验计划规定的生成地图文件名（默认为测试集 120 张；命名规则见 maze_document.generate）。"""
     names = []
     for generator in PLAN_GENERATORS:
         prefix = f"gen_{generator}"
         for loop in PLAN_LOOPS:
-            for seed in PLAN_SEEDS:
+            for seed in seeds:
                 names.append(f"{prefix}_16x16_s{seed}" + (f"_l{loop}" if loop else "") + ".json")
     return names
 
 
-def standard_plan() -> list[ExperimentRun]:
-    """Docs/experiment-plan.md 中的标准实验：实验 1（主对比）与实验 2（随机性）。
+def _plan_maps(seeds) -> list[Path]:
+    """计划规定的生成地图路径；缺失时给出生成命令。"""
+    generated = [MAZE_DIR / name for name in plan_generated_names(seeds)]
+    missing = [p.name for p in generated if not p.exists()]
+    if missing:
+        raise SystemExit(f"缺少 {len(missing)} 张计划地图（如 {missing[0]}），请先运行：\n"
+                         "python tools/MazesTest/maze_app.py --generate backtracker wilson prim kruskal "
+                         f"--loops 0 10 30 --seeds {seeds[0]} {seeds[-1]}")
+    return generated
 
-    地图明确列出：外部迷宫库全部地图（external_*）+ 计划规定的 120 张生成地图；
+
+def standard_plan() -> list[ExperimentRun]:
+    """Docs/experiment-plan.md 中的标准实验。
+
+    实验 1（main）：外部迷宫库全部地图（external_*）+ 120 张测试集生成地图，13 个算法
+        （含 C2 新方案及其消融变体）；
+    实验 2（randomness）：3 张核心地图，随机游走 10 个种子；
     地图库中其他地图（例如手工编辑保存的）不会混入。
 
     Raises:
         SystemExit: 计划要求的生成地图缺失（给出生成命令）。
     """
-    algorithms = list(discover_algorithms()[0])
-    generated = [MAZE_DIR / name for name in plan_generated_names()]
-    missing = [p.name for p in generated if not p.exists()]
-    if missing:
-        raise SystemExit(f"缺少 {len(missing)} 张计划地图（如 {missing[0]}），请先运行：\n"
-                         "python tools/MazesTest/maze_app.py --generate backtracker wilson prim kruskal "
-                         "--loops 0 10 30 --seeds 1 10")
-    all_maps = expand_maps(["mazes/classic/external_*.json"]) + generated
+    test_maps = expand_maps(["mazes/classic/external_*.json"]) + _plan_maps(PLAN_SEEDS)
     core = expand_maps([f"mazes/classic/external_{n}.json" for n in ("1stworld", "japan2017ef", "uk2011f")])
     return [
-        ExperimentRun(all_maps, algorithms, seeds=[0], repeats=3, experiment="main"),
+        ExperimentRun(test_maps, MAIN_ALGORITHMS, seeds=[0], repeats=3, experiment="main"),
         ExperimentRun(core, ["random_walk"], seeds=list(range(10)), experiment="randomness"),
     ]
 
@@ -464,7 +491,7 @@ def main(argv: list[str] | None = None) -> None:
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     if args.plan:
         runs = standard_plan()
-        base = args.out or RESULTS / args.plan
+        base = args.out or RESULTS / "standard"
     else:
         algorithms = list(discover_algorithms()[0]) if args.algorithms == ["all"] else args.algorithms
         runs = [ExperimentRun(expand_maps(args.maps), algorithms, seeds=args.seeds,

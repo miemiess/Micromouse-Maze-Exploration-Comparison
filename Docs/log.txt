@@ -23,3 +23,7 @@ Luca 2026-11-19 完成 D1（Docs/experiment-plan.md）、D2（src/run_experiment
 Luca 2026-11-19 画图功能合并进 src/run_experiments.py（--plot 从 CSV 重画），删除 plot_results.py
 Luca 2026-11-19 matplotlib 改为必需依赖：run_experiments.py 直接导入，去掉未安装时的兼容分支与测试跳过
 Luca 2026-11-19 Result.md 第 2 章更新为正式实验结果（514 张地图），更新摘要、局限与复现方式
+Luca 2026-11-20 统一地图命名（gen_<生成算法>_…，地图组 external 称“外部迷宫库”）；新增 loop_detected 状态；重跑实验 1、2 并同步报告
+Luca 2026-11-20 完成 C1/C2：src/prior_astar.py（先验增强重复 A*：柱子规则推断墙 + 自适应未知边惩罚，含 3 个消融变体）、Docs/algorithm-design.md、开发集（种子 101～110）调参（results/standard/dev）；新方案与消融变体并入实验 1（13 个算法），新增消融图 ablation.png；结论为负面结果，报告第 4 章重写
+Luca 2026-11-20 清理：删除过时的 results/preliminary（已被正式实验取代）；去掉文档中的重复内容与失效引用
+Luca 2026-11-20 删除实验 3（与调参记录重复），开发集只保留 results/standard/dev（tuning.md + tune_dev.py）

@@ -91,6 +91,21 @@ class ExperimentTests(unittest.TestCase):
         self.assertEqual(map_group(Maze.from_json(ROOT / "mazes" / "classic" / "gen_backtracker_16x16_s1.json")),
                          "backtracker_loop0")
 
+    def test_plan_dev_and_test_sets_are_disjoint(self):
+        """C2 开发集（种子 101～110）与测试集不重叠，且不进入任何标准实验；新方案在实验 1 中评估。"""
+        from run_experiments import (ABLATION_VARIANTS, DEV_SEEDS, MAIN_ALGORITHMS,  # noqa: E402
+                                     standard_plan)
+        dev = plan_generated_names(DEV_SEEDS)
+        self.assertEqual(len(dev), 120)
+        self.assertEqual(set(dev) & set(plan_generated_names()), set())
+        runs = {run.experiment: run for run in standard_plan()}
+        self.assertEqual(set(runs), {"main", "randomness"})
+        used = {p.name for run in runs.values() for p in run.maze_paths}
+        self.assertEqual(used & set(dev), set())
+        self.assertEqual(runs["main"].algorithms, MAIN_ALGORITHMS)
+        self.assertEqual(len(MAIN_ALGORITHMS), 13)
+        self.assertTrue({"prior_astar", *ABLATION_VARIANTS} <= set(MAIN_ALGORITHMS))
+
     def test_command_line(self):
         """命令行可以指定地图、算法、种子并导出到指定目录。"""
         main(["--maps", str(CORE[0]), "--algorithms", "dfs", "bfs", "--out", str(self.out / "cli"),

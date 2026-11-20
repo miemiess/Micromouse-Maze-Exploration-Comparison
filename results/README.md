@@ -6,9 +6,9 @@
 
 | 目录 | 内容 |
 | --- | --- |
-| `standard/main/` | 实验 1（主对比）：514 张地图 × 9 个算法，每组合重复 3 次 |
+| `standard/main/` | 实验 1（主对比）：514 张地图 × 13 个算法（含 C2 新方案 `prior_astar` 及 3 个消融变体），每组合重复 3 次；`figures/ablation.png` 为 C2 消融图 |
 | `standard/randomness/` | 实验 2（随机性）：随机游走在 3 张核心迷宫上用种子 0～9 |
-| `preliminary/` | 早期初步实验（存在生成器偏差，见 `Docs/Result.md` 发现 6），仅作历史记录 |
+| `standard/dev/` | C2 开发集（种子 101～110 的 120 张生成地图，不属于任何实验）的调参记录 `tuning.md` 与复现脚本 `tune_dev.py` |
 | `demo/` | 演示用图片与 GIF（`Docs/demo-guide.md`） |
 | `batch-<时间>/` | 上位机自选实验（按需生成） |
 
