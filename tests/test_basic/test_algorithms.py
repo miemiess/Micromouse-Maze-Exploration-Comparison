@@ -1,4 +1,4 @@
-"""src/ 中各算法的验证：DFS、贪心 DFS、Flood-Fill、重复 A*、先验增强重复 A*、沿墙法、随机游走（探索），
+"""基础规则算法（src/basic/algorithms/）的验证：DFS、贪心 DFS、Flood-Fill、重复 A*、先验增强重复 A*、沿墙法、随机游走（探索），
 BFS、A*（已知地图规划）。
 
 探索算法只依赖观测、能到达目标或正确判定无路、结果可复现；BFS 给出最短路参照。
@@ -8,20 +8,20 @@ import sys
 import unittest
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "src"))
-from algorithm_api import run_episode  # noqa: E402
-from astar import AStarPlanner  # noqa: E402
-from bfs import BfsPlanner  # noqa: E402
-from dfs import DfsStrategy  # noqa: E402
-from environment import Direction, Maze, MazeEnvironment, Observation  # noqa: E402
-from flood_fill import FloodFillStrategy  # noqa: E402
-from greedy_dfs import GreedyDfsStrategy  # noqa: E402
-from prior_astar import (PriorAStarFixedPenalty, PriorAStarNoPenalty,  # noqa: E402
+from core.algorithm_api import run_episode  # noqa: E402
+from basic.algorithms.astar import AStarPlanner  # noqa: E402
+from basic.algorithms.bfs import BfsPlanner  # noqa: E402
+from basic.algorithms.dfs import DfsStrategy  # noqa: E402
+from core.environment import Direction, Maze, MazeEnvironment, Observation  # noqa: E402
+from basic.algorithms.flood_fill import FloodFillStrategy  # noqa: E402
+from basic.algorithms.greedy_dfs import GreedyDfsStrategy  # noqa: E402
+from basic.algorithms.prior_astar import (PriorAStarFixedPenalty, PriorAStarNoPenalty,  # noqa: E402
                          PriorAStarNoPostRule, PriorAStarStrategy, _PriorAStar)
-from random_walk import RandomWalkStrategy  # noqa: E402
-from repeated_astar import RepeatedAStarStrategy  # noqa: E402
-from wall_follower import LeftWallFollower, RightWallFollower  # noqa: E402
+from basic.algorithms.random_walk import RandomWalkStrategy  # noqa: E402
+from basic.algorithms.repeated_astar import RepeatedAStarStrategy  # noqa: E402
+from basic.algorithms.wall_follower import LeftWallFollower, RightWallFollower  # noqa: E402
 
 # 3 张核心比赛迷宫（mazes/classic/ 中还有导入的 391 张，测试只用这 3 张以保持速度）。
 EXTERNAL = [ROOT / "mazes" / "classic" / name for name in

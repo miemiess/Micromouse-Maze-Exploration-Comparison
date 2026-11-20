@@ -1,6 +1,6 @@
 """批量实验页（D2）：勾选多张地图和多个算法，批量运行并导出结果。不做动画演示。
 
-运行、统计和导出全部调用 src/run_experiments.py（与命令行共用），本页只负责：
+运行、统计和导出全部调用 src/core/experiments.py（与命令行共用），本页只负责：
     - 选择地图（筛选、全选、按类别选）与算法；
     - 设置种子、重复次数、移动预算、是否测内存；
     - 分批推进运行（界面保持响应，可随时停止），显示进度；
@@ -19,7 +19,7 @@ from PySide6.QtWidgets import (
     QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget)
 
 from maze_document import MapLibrary
-from run_experiments import ExperimentRun, write_outputs
+from core.experiments import LOCAL_RESULTS, ExperimentRun, write_outputs
 from simulation import KNOWN_MAP, ROOT, AlgorithmInfo
 
 CORE_MAPS = ("external_1stworld", "external_japan2017ef", "external_uk2011f")
@@ -103,7 +103,7 @@ class BatchTab(QWidget):
         self.budget = QSpinBox(minimum=0, maximum=10**6, value=0, singleStep=100)
         self.budget.setSpecialValueText("默认 (20 × 格子数)")
         self.memory = QCheckBox("另外运行一轮测量峰值内存（tracemalloc，较慢）")
-        self.output = QLineEdit(placeholderText="留空：results/batch-<时间>")
+        self.output = QLineEdit(placeholderText="留空：results/local/batch-<时间>")
         browse = QPushButton("选择…")
         browse.clicked.connect(self._choose_output)
         out_row = QHBoxLayout()
@@ -213,7 +213,7 @@ class BatchTab(QWidget):
 
     def _choose_output(self) -> None:
         """选择输出目录。"""
-        path = QFileDialog.getExistingDirectory(self, "选择输出目录", str(ROOT / "results"))
+        path = QFileDialog.getExistingDirectory(self, "选择输出目录", str(LOCAL_RESULTS))
         if path:
             self.output.setText(path)
 
@@ -231,7 +231,7 @@ class BatchTab(QWidget):
                                  measure_memory=self.memory.isChecked(), experiment="batch")
         text = self.output.text().strip()
         self.output_dir = Path(text) if text else \
-            ROOT / "results" / f"batch-{datetime.now():%Y%m%d-%H%M%S}"
+            LOCAL_RESULTS / f"batch-{datetime.now():%Y%m%d-%H%M%S}"
         self.tasks, self.position = self.run.tasks(), 0
         self.progress.setRange(0, len(self.tasks))
         self.progress.setValue(0)

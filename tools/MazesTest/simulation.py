@@ -1,6 +1,6 @@
 """上位机与 src/ 算法统一接口之间的连接层。
 
-算法的发现、运行和统计全部来自 src/algorithm_api.py（上位机、批量实验和测试共用同一套规则），
+算法的发现、运行和统计全部来自公共接口层 src/core/algorithm_api.py（上位机、批量实验和测试共用同一套规则），
 本模块只负责把 src/ 加入导入路径并转出这些名称，另外提供画图用的几何函数 wall_segment。
 """
 
@@ -12,7 +12,7 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from algorithm_api import (  # noqa: E402,F401  转出给上位机使用
+from core.algorithm_api import (  # noqa: E402,F401  转出给上位机使用
     DELTAS, EXPLORE, KNOWN_MAP, AlgorithmInfo, Cell, Direction, Edge, Maze, Runner,
     Snapshot, discover_algorithms, load_algorithm, maze_walls, run_episode)
 

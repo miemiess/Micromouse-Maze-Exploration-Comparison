@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tools" / "MazesTest"))
 from maze_document import GENERATORS, MapLibrary, MazeDocument, default_goals, generate  # noqa: E402
 from simulation import (EXPLORE, KNOWN_MAP, Direction, Maze, Runner,  # noqa: E402
@@ -45,7 +45,7 @@ class RunnerTests(unittest.TestCase):
         self.assertNotIn("", modes)  # 沿墙法的内部基类 _WallFollower
         self.assertEqual(set(discover_algorithms(mode=KNOWN_MAP)[0]), {"astar", "bfs"})
         self.assertEqual(load_algorithm("flood_fill").name, "flood_fill")
-        self.assertEqual(load_algorithm("dfs:DfsStrategy").name, "dfs")
+        self.assertEqual(load_algorithm("basic.algorithms.dfs:DfsStrategy").name, "dfs")
         with self.assertRaises(ValueError):
             load_algorithm("no_such_strategy")
 

@@ -12,8 +12,8 @@
     - 选取标准：开发集全部地图“步数 / 最短路”均值最低，相差不到 0.001 时取较小值（与正式流程相同）；
     - 留出集 = 其余外部图 + 实验 1 的 120 张生成测试图；比较重新选出的 c、原 c = 2.5 与重复 A*。
 
-运行（项目根目录）：python results/standard/dev/posthoc_stratified.py
-输出：同目录 posthoc.md。
+运行（项目根目录）：python src/basic/posthoc_stratified.py
+输出：results/basic/dev/posthoc.md。
 """
 
 import random
@@ -21,14 +21,16 @@ import statistics
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[3]
+ROOT = Path(__file__).resolve().parents[2]  # src/basic/<本文件> → 项目根目录
 sys.path.insert(0, str(ROOT / "src"))
-from algorithm_api import run_episode  # noqa: E402
-from bfs import BfsPlanner  # noqa: E402
-from environment import Maze  # noqa: E402
-from prior_astar import FROZEN_SCALE, _PriorAStar  # noqa: E402
-from repeated_astar import RepeatedAStarStrategy  # noqa: E402
-from run_experiments import DEV_SEEDS, PLAN_SEEDS, _plan_maps, expand_maps  # noqa: E402
+OUT_DIR = ROOT / "results" / "basic" / "dev"
+from basic.algorithms.bfs import BfsPlanner  # noqa: E402
+from core.algorithm_api import run_episode  # noqa: E402
+from core.environment import Maze  # noqa: E402
+from basic.algorithms.prior_astar import FROZEN_SCALE, _PriorAStar  # noqa: E402
+from basic.algorithms.repeated_astar import RepeatedAStarStrategy  # noqa: E402
+from basic.plan import DEV_SEEDS, PLAN_SEEDS, plan_maps  # noqa: E402
+from core.experiments import expand_maps  # noqa: E402
 
 SPLIT_SEED = 2026
 DEV_FRACTION = 0.2
@@ -64,16 +66,16 @@ def main():
     hold_ext = [p for p in external if p not in dev_ext]
 
     load = lambda paths: [Maze.from_json(p) for p in paths]  # noqa: E731
-    dev_gen, dev_ext_m = load(_plan_maps(DEV_SEEDS)), load(sorted(dev_ext, key=lambda p: p.stem))
-    test_gen, hold_ext_m = load(_plan_maps(PLAN_SEEDS)), load(hold_ext)
+    dev_gen, dev_ext_m = load(plan_maps(DEV_SEEDS)), load(sorted(dev_ext, key=lambda p: p.stem))
+    test_gen, hold_ext_m = load(plan_maps(PLAN_SEEDS)), load(hold_ext)
     dev, hold = dev_gen + dev_ext_m, hold_ext_m + test_gen
     shortest = {m.maze_id: run_episode(m, BfsPlanner())["steps"] for m in dev + hold}
     ids = lambda mazes: [m.maze_id for m in mazes]  # noqa: E731
 
     lines = ["# 事后分析：按地图来源分层的开发集", "",
              "> **看过测试结果之后做的分析，不是正式结论。** 外部迷宫库的全部地图此前都作为测试集使用过，"
-             "这里的留出集并非从未见过的数据；正式结论以实验 1 与冻结的 c = 2.5 为准。规则见本目录 "
-             "`posthoc_stratified.py` 的说明。", "",
+             "这里的留出集并非从未见过的数据；正式结论以实验 1 与冻结的 c = 2.5 为准。规则见 "
+             "`src/basic/posthoc_stratified.py` 的说明。", "",
              f"- 开发集：{len(dev_gen)} 张生成图（种子 {DEV_SEEDS[0]}～{DEV_SEEDS[-1]}）+ {len(dev_ext_m)} 张外部迷宫库地图"
              f"（按 maze_id 排序后用 random.Random({SPLIT_SEED}) 抽取 {DEV_FRACTION:.0%}）",
              f"- 留出集：其余 {len(hold_ext_m)} 张外部迷宫库地图 + {len(test_gen)} 张生成测试图（实验 1 的种子 1～10）",
@@ -103,7 +105,8 @@ def main():
                      f"{describe(r, ids(test_gen))} | {better} / {worse} |")
     lines += ["", "开发集抽出的外部迷宫库地图：" + "、".join(sorted(m.maze_id for m in dev_ext_m)), ""]
 
-    out = Path(__file__).with_name("posthoc.md")
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    out = OUT_DIR / "posthoc.md"
     out.write_text("\n".join(lines), encoding="utf-8")
     print(out, "chosen c =", chosen)
 

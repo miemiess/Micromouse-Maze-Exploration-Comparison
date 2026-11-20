@@ -7,12 +7,17 @@
          与 src/README.md 的 Strategy 接口完全一致；
        - 已知地图规划（KNOWN_MAP）：plan(maze) 一次拿到完整地图，返回整条路径。
          README 规定两类算法分开实验、分开比较；
-    3. 自动发现：扫描 src/ 中的算法类，新增算法文件无需修改任何其他文件；
+    3. 自动发现：扫描 src/basic/algorithms/（基础规则）与 src/ext/algorithms/（扩展）中的算法类，
+       新增算法文件无需修改任何其他文件；
     4. 驱动：Runner 逐步运行任意一类算法并生成快照，run_episode 一次跑完并返回统计。
        上位机（tools/MazesTest）、批量实验和测试都使用这里的驱动，保证规则只有一份。
 
-新增算法：在 src/ 中新建一个文件，写一个类，设置 name（唯一名称），按类别实现对应方法
-（以及可选的 debug_view / stats），参考 dfs.py、flood_fill.py、wall_follower.py、bfs.py。
+新增算法：在 src/ext/algorithms/（基础规则已冻结，新算法一律放扩展层）中新建一个文件，写一个类，
+设置 name（唯一名称），按类别实现对应方法（以及可选的 debug_view / stats），
+参考 src/basic/algorithms/ 中的 dfs.py、flood_fill.py、wall_follower.py、bfs.py。
+
+本文件属于公共接口层（src/core/）：基础规则与扩展共用，修改时必须保持向后兼容，
+并通过 tests/test_basic/test_regression.py（基础规则结果不变）。
 """
 
 import importlib
@@ -23,7 +28,7 @@ from pathlib import Path
 from time import perf_counter
 from typing import Protocol
 
-from environment import Cell, Direction, Maze, MazeEnvironment, Observation
+from core.environment import Cell, Direction, Maze, MazeEnvironment, Observation
 
 __all__ = [
     "Cell", "Edge", "Direction", "Maze", "MazeEnvironment", "Observation",
@@ -35,7 +40,9 @@ __all__ = [
     "Snapshot", "Runner", "run_episode",
 ]
 
-SRC = Path(__file__).resolve().parent
+SRC = Path(__file__).resolve().parents[1]  # src/
+# 自动发现扫描的算法包：(层, 包名)。基础规则在前，扩展在后；同名算法以先发现的为准并报错。
+ALGORITHM_PACKAGES = (("basic", "basic.algorithms"), ("ext", "ext.algorithms"))
 Edge = frozenset  # 两个相邻格组成的 frozenset，表示它们之间的一面墙
 
 # ====================================================================== 1. 共用工具
@@ -152,18 +159,22 @@ class KnownMapPlanner(Protocol):
 
 # ====================================================================== 3. 自动发现
 
-# src/ 中不是算法的模块，发现时跳过。
-_NOT_ALGORITHMS = {"environment", "algorithm_api", "run_experiments"}
-
-
 @dataclass(frozen=True)
 class AlgorithmInfo:
-    """一个可用算法的登记信息。"""
+    """一个可用算法的登记信息。
+
+    layer：所在层，"basic"（基础规则，冻结）或 "ext"（扩展）。
+    ablation_of：消融变体所属的完整算法名（类属性 ablation_of）；非空时不进主图，只进消融图。
+    ablation_baseline：完整算法的消融基线算法名（类属性 ablation_baseline）。
+    """
     name: str
     module: str
     class_name: str
     mode: str = EXPLORE
     doc: str = ""
+    layer: str = "basic"
+    ablation_of: str = ""
+    ablation_baseline: str = ""
 
     def create(self):
         """新建一个算法对象（每次运行使用独立对象）。"""
@@ -189,38 +200,48 @@ def algorithm_mode(obj) -> str | None:
     return None
 
 
-def discover_algorithms(src_dir: Path = SRC, *, mode: str | None = None
+def discover_algorithms(*, mode: str | None = None, layer: str | None = None
                         ) -> tuple[dict[str, AlgorithmInfo], list[str]]:
-    """扫描 src/ 下的模块，找出所有算法类。
+    """扫描 ALGORITHM_PACKAGES（src/basic/algorithms/、src/ext/algorithms/）中的模块，找出所有算法类。
 
     组员新增算法文件后无需修改任何其他文件，重新启动上位机即可出现在列表中。
 
     Args:
-        src_dir: 算法所在目录。
         mode: 只返回某一类（EXPLORE 或 KNOWN_MAP）；None 时返回全部。
+        layer: 只返回某一层（"basic" 或 "ext"）；None 时返回全部。
 
     Returns:
-        (按名称排序的 {name: AlgorithmInfo}, 导入失败的错误信息列表)。
+        (按名称排序的 {name: AlgorithmInfo}, 导入失败或重名的错误信息列表)。
         单个文件出错不影响其他算法。
     """
     found, errors = {}, []
-    for path in sorted(Path(src_dir).glob("*.py")):
-        module_name = path.stem
-        if module_name.startswith("_") or module_name in _NOT_ALGORITHMS:
+    for pkg_layer, package in ALGORITHM_PACKAGES:
+        if layer is not None and pkg_layer != layer:
             continue
-        try:
-            module = importlib.import_module(module_name)
-        except Exception as exc:  # 组员代码有错误时不影响其他算法
-            errors.append(f"{path.name}: {type(exc).__name__}: {exc}")
-            continue
-        for obj in vars(module).values():
-            if inspect.isclass(obj) and obj.__module__ != module_name:
-                continue  # 跳过从别处导入的类
-            obj_mode = algorithm_mode(obj)
-            if obj_mode and (mode is None or obj_mode == mode):
+        folder = SRC.joinpath(*package.split("."))
+        for path in sorted(folder.glob("*.py")):
+            if path.stem.startswith("_"):
+                continue
+            module_name = f"{package}.{path.stem}"
+            try:
+                module = importlib.import_module(module_name)
+            except Exception as exc:  # 组员代码有错误时不影响其他算法
+                errors.append(f"{path.relative_to(SRC)}: {type(exc).__name__}: {exc}")
+                continue
+            for obj in vars(module).values():
+                if inspect.isclass(obj) and obj.__module__ != module_name:
+                    continue  # 跳过从别处导入的类
+                obj_mode = algorithm_mode(obj)
+                if not obj_mode or (mode is not None and obj_mode != mode):
+                    continue
+                if obj.name in found:
+                    errors.append(f"{path.relative_to(SRC)}: 算法名 {obj.name!r} 与 "
+                                  f"{found[obj.name].module} 重复，已忽略")
+                    continue
                 doc = (inspect.getdoc(obj) or "").splitlines()
-                found[obj.name] = AlgorithmInfo(obj.name, module_name, obj.__name__,
-                                                obj_mode, doc[0] if doc else "")
+                found[obj.name] = AlgorithmInfo(
+                    obj.name, module_name, obj.__name__, obj_mode, doc[0] if doc else "",
+                    pkg_layer, getattr(obj, "ablation_of", ""), getattr(obj, "ablation_baseline", ""))
     return dict(sorted(found.items())), errors
 
 
@@ -228,7 +249,7 @@ def load_algorithm(spec: str):
     """按名称创建算法对象。
 
     Args:
-        spec: 算法名（如 "flood_fill"、"bfs"），或 "模块名:类名"（如 "dfs:DfsStrategy"）。
+        spec: 算法名（如 "flood_fill"、"bfs"），或 "模块名:类名"（如 "basic.algorithms.dfs:DfsStrategy"）。
 
     Raises:
         ValueError: 找不到该算法。

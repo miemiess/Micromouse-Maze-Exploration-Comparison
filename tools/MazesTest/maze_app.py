@@ -4,7 +4,7 @@
     python tools/MazesTest/maze_app.py                                   # 打开 地图库中的第一张地图
     python tools/MazesTest/maze_app.py mazes/classic/external_uk2011f.json
 
-批量导出（不显示窗口，默认输出到 results/figures/）：
+批量导出（不显示窗口，默认输出到 results/local/figures/，不提交）：
     python tools/MazesTest/maze_app.py --export "mazes/classic/*.json"                       # 每张地图一张 PNG
     python tools/MazesTest/maze_app.py --export "mazes/classic/*.json" --strategy flood_fill  # 运行到结束后的画面
     python tools/MazesTest/maze_app.py --export mazes/classic/external_uk2011f.json --strategy dfs --gif
@@ -31,8 +31,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("maze", nargs="?", help="启动时打开的迷宫 JSON")
     parser.add_argument("--export", nargs="+", metavar="MAZE",
                         help="批量导出这些迷宫的图片后退出（可用通配符）")
-    parser.add_argument("-o", "--output", default=str(ROOT / "results" / "figures"),
-                        help="导出目录，默认 results/figures")
+    parser.add_argument("-o", "--output", default=str(ROOT / "results" / "local" / "figures"),
+                        help="导出目录，默认 results/local/figures")
     parser.add_argument("--strategy", help="导出时先用该算法运行到结束，画出最终状态")
     parser.add_argument("--seed", type=int, default=None, help="传给策略的随机种子")
     parser.add_argument("--gif", action="store_true", help="同时导出完整过程 GIF（需要 --strategy）")

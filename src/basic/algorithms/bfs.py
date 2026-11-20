@@ -13,7 +13,7 @@
 
 from collections import deque
 
-from algorithm_api import KNOWN_MAP, Cell, Maze, open_neighbours
+from core.algorithm_api import KNOWN_MAP, Cell, Maze, open_neighbours
 
 
 class BfsPlanner:

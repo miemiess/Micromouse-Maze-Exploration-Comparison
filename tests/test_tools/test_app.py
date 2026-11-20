@@ -12,7 +12,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 HAS_QT = importlib.util.find_spec("PySide6") is not None
 
 if HAS_QT:

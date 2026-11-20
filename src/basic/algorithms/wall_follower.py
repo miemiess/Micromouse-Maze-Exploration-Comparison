@@ -12,7 +12,7 @@
 随机性：无，seed 参数被忽略。
 """
 
-from algorithm_api import (OPPOSITE, Cell, Direction, Observation, inside, step_cell,
+from core.algorithm_api import (OPPOSITE, Cell, Direction, Observation, inside, step_cell,
                            turn_left, turn_right)
 
 

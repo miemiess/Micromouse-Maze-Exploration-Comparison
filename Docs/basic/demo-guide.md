@@ -21,16 +21,16 @@ pip install -r requirements.txt   # PySide6（上位机）与 matplotlib（图�
 | 运行全部测试 | `python -m unittest discover -s tests` |
 | 打开上位机 | `python tools/MazesTest/maze_app.py` |
 | 生成实验计划要求的地图 | `python tools/MazesTest/maze_app.py --generate backtracker wilson prim kruskal --loops 0 10 30 --seeds 1 10` |
-| 运行标准实验（D1 计划） | `python src/run_experiments.py --plan standard` |
+| 运行标准实验（D1 计划） | `python src/run_experiments.py --plan basic` |
 | 自选实验 | `python src/run_experiments.py --maps "mazes/classic/external_*.json" --algorithms dfs flood_fill --repeats 3` |
-| 从 CSV 重画图表 | `python src/run_experiments.py --plot results/standard/main` |
-| 导出演示图片 / GIF | `python tools/MazesTest/maze_app.py --export mazes/classic/external_uk2011f.json --strategy flood_fill --gif -o results/demo` |
+| 从 CSV 重画图表 | `python src/run_experiments.py --plot results/basic/main` |
+| 导出演示图片 / GIF | `python tools/MazesTest/maze_app.py --export mazes/classic/external_uk2011f.json --strategy flood_fill --gif -o results/basic/demo` |
 
 标准实验在一台普通笔记本上约需数分钟（514 张地图 × 13 个算法 × 3 次重复，另加 C2 开发集）。
 
 ## 3. 代表性演示
 
-`results/demo/` 中预先导出了几组图片，答辩时可直接展示，也可以用上一节的命令重新生成：
+`results/basic/demo/` 中预先导出了几组图片，答辩时可直接展示，也可以用上一节的命令重新生成：
 
 | 文件 | 展示的现象 |
 | --- | --- |
@@ -51,12 +51,12 @@ pip install -r requirements.txt   # PySide6（上位机）与 matplotlib（图�
 
 ## 5. 计时不包含动画
 
-所有运行（上位机、命令行、测试）都通过 `src/algorithm_api.py` 的 `Runner` 执行，它只对算法自身的 `reset`、`plan`、`choose_direction` 计时；读图、环境检查、绘图、动画、`debug_view` 和写盘都在计时之外。测试 `tests/test_experiments.py` 中的 `TimingScopeTests` 用一个“绘制很慢”的策略验证了这一点：4 次绘制共耗时 0.2 秒以上，计入的计算时间仍接近 0。批量实验不显示动画，正式计时以批量实验的结果为准。
+所有运行（上位机、命令行、测试）都通过 `src/core/algorithm_api.py` 的 `Runner` 执行，它只对算法自身的 `reset`、`plan`、`choose_direction` 计时；读图、环境检查、绘图、动画、`debug_view` 和写盘都在计时之外。测试 `tests/test_core/test_experiments.py` 中的 `TimingScopeTests` 用一个“绘制很慢”的策略验证了这一点：4 次绘制共耗时 0.2 秒以上，计入的计算时间仍接近 0。批量实验不显示动画，正式计时以批量实验的结果为准。
 
 ## 6. 结果目录
 
 | 目录 | 内容 |
 | --- | --- |
-| `results/standard/` | 按实验计划运行的正式结果（`main/`、`randomness/`；开发集调参记录在 `dev/`） |
-| `results/demo/` | 演示用图片与 GIF |
-| `results/batch-<时间>/` | 上位机批量实验页的自选实验 |
+| `results/basic/` | 按实验计划运行的正式结果（`main/`、`randomness/`；开发集调参记录在 `dev/`） |
+| `results/basic/demo/` | 演示用图片与 GIF |
+| `results/local/batch-<时间>/` | 上位机批量实验页的自选实验 |

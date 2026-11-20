@@ -1,21 +1,27 @@
-"""批量实验（D2）：在多张地图上运行多个算法，导出原始数据、汇总表、运行环境和图表（画图也在本文件）。
+"""批量实验框架（公共接口层，与规则层无关）：在多张地图上运行多个算法，导出原始数据、汇总表、运行环境和图表。
 
-实验规则见 Docs/experiment-plan.md。本模块不依赖界面库，命令行与上位机“批量实验”页共用：
+本模块只提供通用的运行、汇总、导出与画图；“跑哪些地图、哪些算法、几个种子”由各层的实验计划决定：
+    - 基础规则：src/basic/plan.py（Docs/basic/experiment-plan.md）；
+    - 扩展：src/ext/plan.py（待建，Docs/ext/dev-plan.md）。
+各计划模块定义 PLANS = {名称: (构建函数, 默认输出目录)}，命令行 --plan <名称> 自动找到它们。
+本模块不依赖界面库，命令行与上位机“批量实验”页共用：
     - 每次运行都通过 algorithm_api.run_episode 执行，规则与上位机、测试完全一致；
     - 每张地图先用 BFS 求已知地图最短路，作为“步数 / 最短路”的分母；
     - 计时只含算法自身；repeats > 1 时同一组合重复运行，计算时间取中位数，并检查结果是否一致；
     - 失败的运行保留状态与原因，只与成功路径相关的指标（ratio）留空，不填 0。
 
 命令行（项目根目录）：
-    python src/run_experiments.py --plan standard                       # 按实验计划运行全部实验
+    python src/run_experiments.py --plan basic                          # 基础规则的全部正式实验
     python src/run_experiments.py --maps "mazes/classic/external_*.json" --algorithms dfs flood_fill
-    python src/run_experiments.py --plot results/standard/main          # 只从 summary.csv 重画图表
-输出目录（默认 results/<时间>）：runs.csv、summary.csv、summary.md、metadata.json、figures/*.png。
+    python src/run_experiments.py --plot results/basic/main             # 只从 summary.csv 重画图表
+输出：runs.csv、summary.csv、summary.md、metadata.json、figures/*.png。
+自选实验默认写到 results/local/<时间>/（不提交）；--plan 写到计划指定的目录（如 results/basic/）。
 """
 
 import argparse
 import csv
 import glob
+import importlib
 import json
 import platform
 import statistics
@@ -30,11 +36,14 @@ import matplotlib
 matplotlib.use("Agg")  # 只写文件、不弹窗口；与上位机（Qt）同时使用也不冲突
 import matplotlib.pyplot as plt  # noqa: E402
 
-from algorithm_api import EXPLORE, KNOWN_MAP, Maze, discover_algorithms, run_episode  # noqa: E402
+from core.algorithm_api import EXPLORE, KNOWN_MAP, Maze, discover_algorithms, run_episode  # noqa: E402
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]  # src/core/experiments.py → 项目根目录
 MAZE_DIR = ROOT / "mazes" / "classic"
 RESULTS = ROOT / "results"
+LOCAL_RESULTS = RESULTS / "local"  # 自选 / 上位机实验的默认输出，不提交（见 .gitignore）
+# 实验计划模块：每个模块定义 PLANS = {名称: (构建函数, 结果目录名)}；不存在的模块跳过。
+PLAN_MODULES = ("basic.plan", "ext.plan")
 
 RUN_FIELDS = ["run_id", "experiment", "maze_id", "map_group", "algorithm", "experiment_mode",
               "config_id", "seed", "status", "steps", "shortest", "ratio", "turns_90",
@@ -330,7 +339,8 @@ def _grouped_bars(ax, groups: list[str], algorithms: list[str], value, colors=No
 def plot_all(result_dir: Path) -> list[Path]:
     """根据 summary.csv 生成全部图表（写入 <结果目录>/figures/），返回写出的文件。
 
-    消融变体（ABLATION_VARIANTS）不进主图，另画 ablation.png。
+    消融变体（类属性 ablation_of 非空的算法）不进主图；每个有消融变体的算法另画 ablation_<算法名>.png，
+    包含它的消融基线（类属性 ablation_baseline）、全部变体与完整版。
     生成：ratio_by_group.png（各地图组的平均“步数 / 最短路”，对数坐标）、success_by_group.png（成功率）、
     compute_time.png（各算法计算时间中位数）、expanded_nodes.png（已知地图算法的扩展节点数）。
     图中文字使用英文，避免默认字体缺少中文字形；数值表见同目录 summary.md。
@@ -340,8 +350,10 @@ def plot_all(result_dir: Path) -> list[Path]:
     out = result_dir / "figures"
     out.mkdir(exist_ok=True)
     lookup = {(r["map_group"], r["algorithm"]): r for r in rows}
+    infos = discover_algorithms()[0]
+    variants = {name for name, info in infos.items() if info.ablation_of}
     explore = [r for r in rows if r["experiment_mode"] == "unknown_exploration"
-               and r["algorithm"] not in ABLATION_VARIANTS]
+               and r["algorithm"] not in variants]
     known = [r for r in rows if r["experiment_mode"] == "known_map_planning"]
     groups = sorted({r["map_group"] for r in rows if r["map_group"] != "ALL"},
                     key=lambda g: (g != "external", g))
@@ -374,7 +386,7 @@ def plot_all(result_dir: Path) -> list[Path]:
         _style(ax, "Success rate within budget", "success rate")
         save(fig, "success_by_group.png")
 
-    everyone = [r for r in rows if r["map_group"] == "ALL" and r["algorithm"] not in ABLATION_VARIANTS]
+    everyone = [r for r in rows if r["map_group"] == "ALL" and r["algorithm"] not in variants]
     if everyone:
         everyone.sort(key=lambda r: r["median_compute_ms"] or 0)
         fig, ax = plt.subplots(figsize=(7, 0.45 * len(everyone) + 1.5))
@@ -396,88 +408,55 @@ def plot_all(result_dir: Path) -> list[Path]:
         _style(ax, "Known-map planners: nodes expanded (same shortest length)", "expanded nodes")
         save(fig, "expanded_nodes.png")
 
-    ablation = [a for a in ["repeated_astar", *ABLATION_VARIANTS, "prior_astar"]
-                if any(r["algorithm"] == a for r in rows)]
-    if any(a in ABLATION_VARIANTS for a in ablation):
+    present = {r["algorithm"] for r in rows}
+    for full in sorted({infos[v].ablation_of for v in variants & present}):
+        baseline = infos[full].ablation_baseline if full in infos else ""
+        members = [a for a in [baseline, *sorted(v for v in variants & present
+                                                 if infos[v].ablation_of == full), full]
+                   if a and a in present]
         # 单独一张图，颜色按本图内顺序取色板（与主图的颜色无关）。
         fig, ax = plt.subplots(figsize=(max(7, 1.3 * len(groups) + 3), 4.5))
-        _grouped_bars(ax, groups, ablation,
+        _grouped_bars(ax, groups, members,
                       lambda g, a: (lookup.get((g, a)) or {}).get("mean_ratio"),
-                      colors=[PALETTE[i] for i in range(len(ablation))])
+                      colors=[PALETTE[i % len(PALETTE)] for i in range(len(members))])
         ax.axhline(1, color=MUTED, linewidth=1, linestyle="--")
-        _style(ax, "C2 ablation: steps / shortest path (mean; baseline = repeated_astar)", "ratio")
-        save(fig, "ablation.png")
+        _style(ax, f"Ablation of {full}: steps / shortest path (mean; baseline = {baseline or 'none'})",
+               "ratio")
+        save(fig, f"ablation_{full}.png")
     return written
 
 
 
-# ====================================================================== 实验计划
+# ====================================================================== 实验计划注册
 
-PLAN_GENERATORS = ("backtracker", "wilson", "prim", "kruskal")
-PLAN_LOOPS = (0, 10, 30)
-PLAN_SEEDS = range(1, 11)
-DEV_SEEDS = range(101, 111)  # 开发集：只用于 C2 新方案调参（results/standard/dev/tune_dev.py），不进入任何实验
-# C2 新方案的消融变体：与其他算法同在实验 1 中运行，但只出现在消融图表中，不进主图。
-ABLATION_VARIANTS = ["prior_astar_no_penalty", "prior_astar_no_post", "prior_astar_fixed"]
-# 实验 1 的 13 个算法（固定列出，新增算法文件不会改变实验 1）。
-MAIN_ALGORITHMS = ["astar", "bfs", "dfs", "flood_fill", "greedy_dfs", "random_walk",
-                   "repeated_astar", "wall_follower_left", "wall_follower_right",
-                   "prior_astar", *ABLATION_VARIANTS]
-
-
-def plan_generated_names(seeds=PLAN_SEEDS) -> list[str]:
-    """实验计划规定的生成地图文件名（默认为测试集 120 张；命名规则见 maze_document.generate）。"""
-    names = []
-    for generator in PLAN_GENERATORS:
-        prefix = f"gen_{generator}"
-        for loop in PLAN_LOOPS:
-            for seed in seeds:
-                names.append(f"{prefix}_16x16_s{seed}" + (f"_l{loop}" if loop else "") + ".json")
-    return names
-
-
-def _plan_maps(seeds) -> list[Path]:
-    """计划规定的生成地图路径；缺失时给出生成命令。"""
-    generated = [MAZE_DIR / name for name in plan_generated_names(seeds)]
-    missing = [p.name for p in generated if not p.exists()]
-    if missing:
-        raise SystemExit(f"缺少 {len(missing)} 张计划地图（如 {missing[0]}），请先运行：\n"
-                         "python tools/MazesTest/maze_app.py --generate backtracker wilson prim kruskal "
-                         f"--loops 0 10 30 --seeds {seeds[0]} {seeds[-1]}")
-    return generated
-
-
-def standard_plan() -> list[ExperimentRun]:
-    """Docs/experiment-plan.md 中的标准实验。
-
-    实验 1（main）：外部迷宫库全部地图（external_*）+ 120 张测试集生成地图，13 个算法
-        （含 C2 新方案及其消融变体）；
-    实验 2（randomness）：3 张核心地图，随机游走 10 个种子；
-    地图库中其他地图（例如手工编辑保存的）不会混入。
-
-    Raises:
-        SystemExit: 计划要求的生成地图缺失（给出生成命令）。
-    """
-    test_maps = expand_maps(["mazes/classic/external_*.json"]) + _plan_maps(PLAN_SEEDS)
-    core = expand_maps([f"mazes/classic/external_{n}.json" for n in ("1stworld", "japan2017ef", "uk2011f")])
-    return [
-        ExperimentRun(test_maps, MAIN_ALGORITHMS, seeds=[0], repeats=3, experiment="main"),
-        ExperimentRun(core, ["random_walk"], seeds=list(range(10)), experiment="randomness"),
-    ]
+def available_plans() -> dict:
+    """收集各层 plan 模块中的 PLANS：{名称: (构建函数, 结果目录名)}。尚未创建的计划模块跳过。"""
+    plans = {}
+    for module_name in PLAN_MODULES:
+        try:
+            module = importlib.import_module(module_name)
+        except ModuleNotFoundError as exc:
+            if exc.name == module_name:
+                continue
+            raise
+        plans.update(getattr(module, "PLANS", {}))
+    return plans
 
 
 def main(argv: list[str] | None = None) -> None:
     """命令行入口。"""
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--plan", choices=["standard"], help="按实验计划运行全部实验")
+    plans = available_plans()
+    parser.add_argument("--plan", choices=sorted(plans), help="按某一层的实验计划运行全部正式实验")
     parser.add_argument("--maps", nargs="+", default=["mazes/classic/*.json"], help="地图路径或通配符")
     parser.add_argument("--algorithms", nargs="+", default=["all"], help="算法名，all 表示全部")
     parser.add_argument("--seeds", nargs="+", type=int, default=[0])
     parser.add_argument("--repeats", type=int, default=1, help="重复次数，计算时间取中位数")
     parser.add_argument("--max-steps", type=int, default=None)
     parser.add_argument("--memory", action="store_true", help="另外运行一轮测量峰值内存")
-    parser.add_argument("--out", type=Path, default=None, help="输出目录，默认 results/<时间>")
+    parser.add_argument("--out", type=Path, default=None,
+                        help="输出目录；默认 --plan 写到计划目录，自选实验写到 results/local/<时间>")
     parser.add_argument("--no-plot", action="store_true")
     parser.add_argument("--plot", nargs="+", type=Path, metavar="RESULT_DIR",
                         help="不运行实验，只从这些结果目录的 summary.csv 重画图表")
@@ -490,14 +469,15 @@ def main(argv: list[str] | None = None) -> None:
 
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     if args.plan:
-        runs = standard_plan()
-        base = args.out or RESULTS / "standard"
+        build, folder = plans[args.plan]
+        runs = build()
+        base = args.out or RESULTS / folder
     else:
         algorithms = list(discover_algorithms()[0]) if args.algorithms == ["all"] else args.algorithms
         runs = [ExperimentRun(expand_maps(args.maps), algorithms, seeds=args.seeds,
                               repeats=args.repeats, max_steps=args.max_steps,
                               measure_memory=args.memory)]
-        base = args.out or RESULTS / stamp
+        base = args.out or LOCAL_RESULTS / stamp
     for run in runs:
         total = len(run.tasks())
         out = base / run.experiment if len(runs) > 1 else base

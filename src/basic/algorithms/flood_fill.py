@@ -14,7 +14,7 @@
 
 from collections import deque
 
-from algorithm_api import DELTAS, ORDER, Cell, Direction, Observation
+from core.algorithm_api import DELTAS, ORDER, Cell, Direction, Observation
 
 
 class FloodFillStrategy:

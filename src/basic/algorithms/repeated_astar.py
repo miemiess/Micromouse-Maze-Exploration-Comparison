@@ -13,8 +13,8 @@
 随机性：无。
 """
 
-from algorithm_api import Cell, Direction, Observation, direction_between, inside, step_cell
-from astar import astar_search
+from core.algorithm_api import Cell, Direction, Observation, direction_between, inside, step_cell
+from basic.algorithms.astar import astar_search
 
 
 class RepeatedAStarStrategy:

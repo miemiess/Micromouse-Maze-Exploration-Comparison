@@ -5,10 +5,10 @@ import sys
 import unittest
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 # 从项目目录导入环境，路径不依赖终端当前所在位置。
 sys.path.insert(0, str(ROOT / "src"))
-from environment import Direction, Maze, MazeEnvironment
+from core.environment import Direction, Maze, MazeEnvironment
 
 # 每个方向对应的坐标变化；回溯时使用反方向。
 MOVES = {

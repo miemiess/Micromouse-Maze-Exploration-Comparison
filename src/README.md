@@ -1,57 +1,81 @@
-# 代码目录与统一接口
+# 代码目录与公共接口
 
-本文件是环境、探索策略和实验执行器之间的第一版接口约定。A2、B、C、D
-模块均按此约定接入；需要修改公共字段或计数规则时，先在任务 Issue 中说明影响，
-再同步修改调用方和本文件。
+本文件是**公共接口层的契约**：环境、算法、实验框架之间如何交互。基础规则与扩展共用这一套接口；
+新代码（人或 AI 编写）只要遵守本文件，就能被上位机、批量实验和测试自动接入。
+修改公共字段或计数规则前，先在 Issue 中说明影响，同步修改调用方和本文件，并保证
+`tests/test_basic/test_regression.py`（基础规则结果不变）通过。
 
-下文的 Strategy 接口固定未知迷宫探索的公共规则。已知完整地图的 BFS、Dijkstra、A* 属于独立实验模式，
-不直接读取本接口中的未知迷宫状态，其接口见“统一接口文件 algorithm_api.py”一节。
+## 目录分层
 
-## 文件职责
+```
+src/
+  run_experiments.py      命令行入口（薄壳）→ core/experiments.py
+  core/                   公共接口层：规则无关，basic 与 ext 共用，修改必须向后兼容
+    environment.py          地图读取与验证、真值墙壁、观测、移动、访问与转向统计
+    algorithm_api.py        共用工具、两类算法接口、自动发现、驱动 Runner / run_episode
+    experiments.py          批量实验框架：运行、汇总、导出 CSV / 图表、实验计划注册（--plan）
+  basic/                  基础规则层：16×16、每步代价 1、理想观测。冻结于标签 basic-rules-v1，只修 bug
+    algorithms/             9 个已有算法 + 本组新方案 prior_astar（含 3 个消融变体）
+    plan.py                 基础规则的实验计划（实验 1、2），注册为 --plan basic
+    dev_tuning.py           C2 开发集调参 → results/basic/dev/tuning.md
+    posthoc_stratified.py   事后分析：分层开发集 → results/basic/dev/posthoc.md
+  ext/                    扩展层（开发中）：新规则与为新规则写的算法，见 ext/README.md
+    rules/                  规则层：代价模型、观测模型、比赛流程
+    algorithms/             扩展算法（自动发现扫描本目录）
+    plan.py                 （待建）扩展实验计划，注册为 --plan <名称>
+```
 
-代码目录保持扁平，每个算法使用一个文件：
+**新代码放哪里**：
 
-| 文件 | 责任 |
-| --- | --- |
-| `environment.py` | 地图读取与验证、真值墙壁、观测、移动、访问及转向统计 |
-| `algorithm_api.py` | **统一接口**：共用方向工具、两类算法接口、自动发现、逐步驱动 `Runner` 与 `run_episode`（已实现） |
-| `dfs.py` | DFS＋实际移动回溯（已实现） |
-| `greedy_dfs.py` | 贪心 DFS：只把 DFS 的邻格顺序改为离目标近的优先，用于消融对比（已实现） |
-| `flood_fill.py` | 在线地图、距离传播与动作选择（已实现） |
-| `repeated_astar.py` | 乐观地图上按需重新规划的 A*，与 Flood-Fill 对比计算量（已实现） |
-| `wall_follower.py` | 左手／右手沿墙策略及循环终止（已实现） |
-| `random_walk.py` | 随机游走，下界基线，使用种子（已实现） |
-| `bfs.py` | 已知地图 BFS 最短路，独立实验模式的参照（已实现） |
-| `astar.py` | 已知地图 A* 最短路（曼哈顿启发式），并提供通用 `astar_search`（已实现） |
-| `frontier.py`（可选） | 前沿选择与已知通路导航 |
-| `prior_astar.py` | 本组提出的先验增强重复 A*（柱子规则推断墙 + 自适应未知边惩罚）及 3 个消融变体（C1/C2，已实现） |
-| `run_experiments.py` | 批量实验：统一预算、地图输入、批量运行，导出 CSV、汇总、元数据与图表（`--plot` 可只从 CSV 重画）；命令行与上位机共用（已实现） |
+| 要做的事 | 位置 | 说明 |
+| --- | --- | --- |
+| 新算法（任何规则） | `src/ext/algorithms/<名称>.py` | 一个文件一个算法（或一组变体）；自动发现，无需改其他文件 |
+| 新规则（转弯代价、两阶段、噪声…） | `src/ext/rules/<名称>.py` | 设计见 `Docs/ext/dev-plan.md`；不修改 `core/environment.py` 的基础语义 |
+| 新实验计划 | `src/ext/plan.py` 中的 `PLANS` | 结果写到 `results/ext/<名称>/` |
+| 公共工具（多层共用） | `src/core/` | 必须向后兼容；回归测试必须通过 |
+| 修基础规则算法的 bug | `src/basic/algorithms/` | 只修 bug，不改行为；改了行为会被回归测试拦下 |
 
-实验执行器通过统一策略接口注册算法，不写死算法数量。随机策略必须接收并记录种子。
+## 公共接口 algorithm_api.py
 
-## 统一接口文件 algorithm_api.py
-
-算法文件**只写算法**；方向工具、算法的发现、运行和统计都由 `algorithm_api.py` 负责。上位机
+算法文件**只写算法**；方向工具、算法的发现、运行和统计都由 `core/algorithm_api.py` 负责。上位机
 （`tools/MazesTest`）、批量实验和测试都调用它，规则只有一份。
 
-**新增算法的步骤**：在 `src/` 中新建一个文件，写一个类，设置唯一的 `name`，按类别实现下面的方法。
-共用工具（`DELTAS`、`OPPOSITE`、`turn_left`、`step_cell` 等）从 `algorithm_api` 导入，不要各自重写。
-不需要修改任何其他文件：上位机重启后自动发现，探索算法出现在“实时运行”和“同屏对比”页，
-已知地图算法出现在“已知地图规划”页。类名以下划线开头的内部基类不会被发现。
+**新增算法的步骤**：在 `src/ext/algorithms/` 中新建一个文件，写一个类，设置唯一的 `name`（不能与已有算法重名，
+重名会在发现时报错），按类别实现下面的方法。共用工具（`DELTAS`、`OPPOSITE`、`turn_left`、`step_cell` 等）
+从 `core.algorithm_api` 导入，不要各自重写；需要复用基础算法时从 `basic.algorithms.<模块>` 导入
+（例如 `from basic.algorithms.astar import astar_search`）。不需要修改任何其他文件：上位机重启后自动发现，
+扩展算法在界面上带 `[EXT]` 标记。类名以下划线开头的内部基类不会被发现。
 
 | 类别 | `mode` | 必须实现 | 可选实现 | 能看到什么 |
 | --- | --- | --- | --- | --- |
-| 未知地图探索 | `EXPLORE`（默认，可不写） | `reset`、`choose_direction`（即下文的 Strategy 接口，未改变） | `debug_view` | 只有每步的 `Observation` |
+| 未知地图探索 | `EXPLORE`（默认，可不写） | `reset`、`choose_direction`（即下文的 Strategy 接口） | `debug_view` | 只有每步的 `Observation` |
 | 已知地图规划 | `KNOWN_MAP` | `plan(maze) -> list[Cell] \| None` | `debug_view`、`stats` | 完整地图（用 `open_neighbours`、`has_wall` 读取） |
 
-**已知地图规划器（新增接口，待组内确认）**：`plan` 返回从起点到目标的格子序列（含起点），无路时返回
-`None`。驱动先检查路径从起点出发且逐格相邻，再交给环境逐格执行，因此步数、转向等统计与探索算法同口径；
-规划耗时计入 `compute_seconds`；`stats()` 返回的额外指标（如 BFS 的 `expanded_nodes`）并入结果。
-两类算法按 README 约定分开比较。
+**可选的类属性**：
+
+| 属性 | 作用 |
+| --- | --- |
+| `ablation_of = "<完整算法名>"` | 声明自己是某算法的消融变体：不进主图，只进 `ablation_<完整算法名>.png` |
+| `ablation_baseline = "<基线算法名>"` | 在完整算法上声明消融基线（例如 `prior_astar` 的基线是 `repeated_astar`） |
+| `loop_detected = True`（运行时） | 返回 `None` 前设置，运行状态记为 `loop_detected` 而非 `no_path` |
+
+**已知地图规划器**：`plan` 返回从起点到目标的格子序列（含起点），无路时返回 `None`。驱动先检查路径从起点出发
+且逐格相邻，再交给环境逐格执行，因此步数、转向等统计与探索算法同口径；规划耗时计入 `compute_seconds`；
+`stats()` 返回的额外指标（如 BFS 的 `expanded_nodes`）并入结果。两类算法分开比较。
 
 **驱动**：`Runner(maze, algorithm, seed=..., max_steps=..., time_budget=...)` 逐步运行并生成快照，
-供上位机显示；`run_episode(...)` 一次跑完并返回统计字典，`run_experiments.py` 应直接使用它，
-不要另写一套运行规则。两者的计时、预算和终止状态都按下文“调用示例”的规则执行。
+供上位机显示；`run_episode(...)` 一次跑完并返回统计字典，实验框架直接使用它，不要另写一套运行规则。
+两者的计时、预算和终止状态都按下文“调用示例”的规则执行。
+
+**实验框架**：`core/experiments.py` 提供 `ExperimentRun`（地图 × 算法 × 种子 × 重复）、`write_outputs`
+（runs.csv / summary / metadata / 图表）和 `plot_all`。实验计划写在各层的 `plan.py` 里，
+定义 `PLANS = {名称: (构建函数, 结果目录名)}`，命令行 `--plan <名称>` 自动找到。
+
+**扩展接入点（规划中，Docs/ext/dev-plan.md 阶段 0）**：规则对象 `Ruleset` 将以可选参数
+`Runner(..., rule=BASIC)` 接入，默认值保持基础规则不变；需要规则参数的算法可选实现 `configure(rule)`。
+在它实现之前，扩展算法按基础规则接口编写即可。
+
+实验执行器通过统一策略接口注册算法，不写死算法数量。随机策略必须接收并记录种子。
 
 ## 坐标、方向与单元格
 
@@ -63,7 +87,7 @@
 - 对应位移为 `N: (0, 1)`、`E: (1, 0)`、`S: (0, -1)`、`W: (-1, 0)`。
 - 迷宫外边界始终是墙，不在地图文件中重复列出。
 
-建议在 `environment.py` 中提供下列公共类型；算法应导入这些类型，不各自定义另一套方向：
+`core/environment.py` 提供下列公共类型；算法应导入这些类型，不各自定义另一套方向：
 
 ```python
 from enum import Enum
@@ -145,7 +169,7 @@ class Direction(str, Enum):
 
 ## Observation 观测结构
 
-建议由 `environment.py` 提供不可变观测对象：
+`core/environment.py` 提供不可变观测对象：
 
 ```python
 from dataclasses import dataclass
@@ -212,7 +236,7 @@ class Strategy(Protocol):
 
 ## Environment 环境接口
 
-A2 至少实现以下行为；具体类内部结构可以调整，但公开语义保持一致：
+`core/environment.py` 的 `MazeEnvironment` 实现以下行为；内部结构可以调整，但公开语义保持一致：
 
 ```python
 env = MazeEnvironment(maze, max_steps=20 * maze.width * maze.height)
@@ -286,7 +310,7 @@ class StepResult:
 
 ## 调用示例
 
-下面展示执行器与策略的最小交互；A2/D2 实现时可封装成函数，但语义保持一致：
+下面展示执行器与策略的最小交互（`Runner` / `run_episode` 即按此实现）：
 
 ```python
 from time import perf_counter
@@ -324,7 +348,7 @@ while env.status == "running":
 summary = env.summary(compute_seconds=compute_seconds)
 ```
 
-`finish`、`summary` 的内部实现由 A2/D2 决定，但不得改变上述状态和指标含义。批量实验还需
+`finish`、`summary` 的内部实现可以调整，但不得改变上述状态和指标含义。批量实验还需
 记录 `maze_id`、算法名、配置 ID、运行编号、随机种子、实验模式、代码提交和失败原因。
 
 ## 接入检查清单
@@ -340,5 +364,7 @@ summary = env.summary(compute_seconds=compute_seconds)
 - [ ] 随机策略保存种子，运行可以复现；
 - [ ] 已知地图规划和未知地图探索使用不同实验模式与结果表。
 
-本接口完成组内审阅后，A2 实现 `environment.py`，B/C 模块实现策略，D 模块实现批量执行
-与结果输出。实现发现接口缺项时更新本文件，并在对应 Issue 中记录理由和受影响模块。
+- [ ] 新算法放在 `src/ext/algorithms/`，名称不与已有算法重复；
+- [ ] `python -m unittest discover -s tests` 全部通过（含基础规则回归测试）。
+
+实现中发现接口缺项时更新本文件，并在对应 Issue 中记录理由和受影响模块。

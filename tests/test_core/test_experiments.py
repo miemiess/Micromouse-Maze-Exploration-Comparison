@@ -1,4 +1,4 @@
-"""批量实验（D2）与计时范围（D3）的测试。"""
+"""公共实验框架（src/core/experiments.py）：批量运行、导出、画图与计时范围的测试。"""
 
 import csv
 import json
@@ -8,11 +8,11 @@ import time
 import unittest
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "src"))
-from algorithm_api import Direction, Maze, Runner  # noqa: E402
-from run_experiments import (ExperimentRun, main, map_group, plan_generated_names,  # noqa: E402
-                             summarize, write_outputs)
+from core.algorithm_api import Direction, Maze, Runner  # noqa: E402
+from core.experiments import (ExperimentRun, available_plans, main, map_group,  # noqa: E402
+                              summarize, write_outputs)
 
 CORE = [ROOT / "mazes" / "classic" / f"external_{n}.json" for n in ("1stworld", "uk2011f")]
 
@@ -79,32 +79,6 @@ class ExperimentTests(unittest.TestCase):
         figure.unlink()
         main(["--plot", str(out)])  # 只从 summary.csv 重画图表
         self.assertTrue(figure.exists())
-
-    def test_plan_map_set_exists(self):
-        """实验计划的 120 张生成地图都在地图库中，且分组名称正确。"""
-        names = plan_generated_names()
-        self.assertEqual(len(names), 120)
-        missing = [n for n in names if not (ROOT / "mazes" / "classic" / n).exists()]
-        self.assertEqual(missing, [])
-        maze = Maze.from_json(ROOT / "mazes" / "classic" / "gen_wilson_16x16_s3_l30.json")
-        self.assertEqual(map_group(maze), "wilson_loop30")
-        self.assertEqual(map_group(Maze.from_json(ROOT / "mazes" / "classic" / "gen_backtracker_16x16_s1.json")),
-                         "backtracker_loop0")
-
-    def test_plan_dev_and_test_sets_are_disjoint(self):
-        """C2 开发集（种子 101～110）与测试集不重叠，且不进入任何标准实验；新方案在实验 1 中评估。"""
-        from run_experiments import (ABLATION_VARIANTS, DEV_SEEDS, MAIN_ALGORITHMS,  # noqa: E402
-                                     standard_plan)
-        dev = plan_generated_names(DEV_SEEDS)
-        self.assertEqual(len(dev), 120)
-        self.assertEqual(set(dev) & set(plan_generated_names()), set())
-        runs = {run.experiment: run for run in standard_plan()}
-        self.assertEqual(set(runs), {"main", "randomness"})
-        used = {p.name for run in runs.values() for p in run.maze_paths}
-        self.assertEqual(used & set(dev), set())
-        self.assertEqual(runs["main"].algorithms, MAIN_ALGORITHMS)
-        self.assertEqual(len(MAIN_ALGORITHMS), 13)
-        self.assertTrue({"prior_astar", *ABLATION_VARIANTS} <= set(MAIN_ALGORITHMS))
 
     def test_command_line(self):
         """命令行可以指定地图、算法、种子并导出到指定目录。"""

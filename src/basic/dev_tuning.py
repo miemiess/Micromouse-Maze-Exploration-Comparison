@@ -1,9 +1,9 @@
-"""C2 开发集记录（开发集的唯一结果）：只在开发集（种子 101～110 生成的 120 张地图）上扫描惩罚参数，结果写入同目录 tuning.md。
+"""C2 开发集调参（基础规则）：只在开发集（种子 101～110 生成的 120 张地图）上扫描惩罚参数，结果写入 results/basic/dev/tuning.md。
 
 选取标准（实验计划第 4 节，运行前确定）：开发集“步数 / 最短路”均值最低；相差不到 0.001 时取较小值。
-选定的值写入 src/prior_astar.py 的 FROZEN_SCALE、FROZEN_FIXED 后冻结。本脚本不读取测试集。
+选定的值写入 src/basic/algorithms/prior_astar.py 的 FROZEN_SCALE、FROZEN_FIXED 后冻结。本脚本不读取测试集。
 
-运行（项目根目录）：python results/standard/dev/tune_dev.py
+运行（项目根目录）：python src/basic/dev_tuning.py
 """
 
 import statistics
@@ -11,13 +11,14 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[3]
+ROOT = Path(__file__).resolve().parents[2]  # src/basic/<本文件> → 项目根目录
 sys.path.insert(0, str(ROOT / "src"))
-from algorithm_api import run_episode  # noqa: E402
-from bfs import BfsPlanner  # noqa: E402
-from environment import Maze  # noqa: E402
-from prior_astar import _PriorAStar  # noqa: E402
-from run_experiments import DEV_SEEDS, _plan_maps  # noqa: E402
+OUT_DIR = ROOT / "results" / "basic" / "dev"
+from basic.algorithms.bfs import BfsPlanner  # noqa: E402
+from core.algorithm_api import run_episode  # noqa: E402
+from core.environment import Maze  # noqa: E402
+from basic.algorithms.prior_astar import _PriorAStar  # noqa: E402
+from basic.plan import DEV_SEEDS, plan_maps  # noqa: E402
 
 SCALES = (0.5, 1, 1.5, 2, 2.5, 3, 4, 5)
 FIXED = (0, 0.25, 0.5, 0.75, 1, 1.5, 2, 2.5, 3)
@@ -42,7 +43,7 @@ def evaluate(cls, mazes, shortest):
 
 
 def main():
-    mazes = [Maze.from_json(path) for path in _plan_maps(DEV_SEEDS)]  # 缺失时提示生成命令
+    mazes = [Maze.from_json(path) for path in plan_maps(DEV_SEEDS)]  # 缺失时提示生成命令
     shortest = {m.maze_id: run_episode(m, BfsPlanner())["steps"] for m in mazes}
     _, _, base_steps = evaluate(variant(unknown_penalty=0.0), mazes, shortest)
 
@@ -69,8 +70,9 @@ def main():
 
     lines += ["## 柱子规则", "",
               "开发集上开、关柱子规则，120 张地图的路线完全相同（规则在 10% / 30% 环路图上常被观测推翻而自动关闭；"
-              "在无环图上虽然推断出软墙，但没有改变任何一次决策，原因见 Docs/algorithm-design.md）。", ""]
-    out = Path(__file__).with_name("tuning.md")
+              "在无环图上虽然推断出软墙，但没有改变任何一次决策，原因见 Docs/basic/algorithm-design.md）。", ""]
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    out = OUT_DIR / "tuning.md"
     out.write_text("\n".join(lines), encoding="utf-8")
     print(out, best)
 

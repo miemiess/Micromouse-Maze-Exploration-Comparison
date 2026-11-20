@@ -24,7 +24,7 @@ from simulation import ROOT, AlgorithmInfo, Direction, Maze, Runner
 from .export import export_gif, render_image, save_png, snapshot_title, tile_images
 from .maze_view import MazeView, ViewOptions
 
-FIGURE_DIR = ROOT / "results" / "figures"
+FIGURE_DIR = ROOT / "results" / "local" / "figures"  # 上位机导出的图片，不提交
 
 # 每秒决策次数的档位。
 SPEEDS = [1, 2, 4, 8, 15, 30, 60, 120, 300, 1000]
@@ -262,7 +262,7 @@ class DisplayBox(QGroupBox):
 
 
 def ask_save_path(parent, title: str, default_name: str, file_filter: str) -> Path | None:
-    """弹出保存对话框，默认放在 results/figures/；取消时返回 None。"""
+    """弹出保存对话框，默认放在 results/local/figures/；取消时返回 None。"""
     path, _ = QFileDialog.getSaveFileName(parent, title, str(FIGURE_DIR / default_name),
                                           file_filter)
     return Path(path) if path else None
@@ -395,7 +395,7 @@ class RunTab(QWidget):
         """按当前地图、算法、种子和预算新建 Runner。"""
         name = self.algorithm.currentText()
         info = self.strategies.get(name)
-        self.description.setText(f"{info.module}.py · {info.doc}" if info else "src/ 中没有这一类算法")
+        self.description.setText(f"{'[EXT] ' if info.layer == 'ext' else ''}{info.module} · {info.doc}" if info else "没有这一类算法")
         self.log.clear()
         if self.maze is None or info is None:
             self.runner = None

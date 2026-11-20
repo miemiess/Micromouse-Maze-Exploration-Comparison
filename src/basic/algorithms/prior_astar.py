@@ -2,7 +2,7 @@
 
 背景：重复 A* 把未知边全部视为通路（乐观假设），被新墙挡住后才修正。在单位步长代价下，
 它被"看起来能走、其实有墙"的未知边误导，是多走路的主要原因（Docs/Result.md 发现 2、6）。
-本策略用两种办法减少这种误导，设计说明见 Docs/algorithm-design.md。
+本策略用两种办法减少这种误导，设计说明见 Docs/basic/algorithm-design.md。
 
 机制 1：柱子规则推断墙（结构先验，use_post_rule）
     比赛迷宫规则：除目标区中心外，每根内部柱子至少连着一面墙（因此除目标区外没有 2×2 的空地）。
@@ -28,8 +28,8 @@ None（no_path）。两个机制都关闭时，每一步的决策与 repeated_as
 
 import heapq
 
-from algorithm_api import Cell, Direction, Observation, direction_between, inside, step_cell
-from astar import manhattan_to_goals
+from core.algorithm_api import Cell, Direction, Observation, direction_between, inside, step_cell
+from basic.algorithms.astar import manhattan_to_goals
 
 Edge = frozenset
 
@@ -207,7 +207,7 @@ class _PriorAStar:
 
 
 # 开发集（种子 101～110 的 120 张生成地图）上按"步数 / 最短路"均值选定，之后冻结，不再按测试结果修改。
-# 调参记录见 results/standard/dev/（tuning.md 与复现脚本 tune_dev.py）。
+# 调参记录见 results/basic/dev/tuning.md（复现脚本 src/basic/dev_tuning.py）。
 FROZEN_SCALE = 2.5   # 自适应惩罚系数 c（候选 0.5～5）
 FROZEN_FIXED = 2.5   # 固定惩罚 δ 的最佳值（候选 0～4），只用于消融对照
 
@@ -216,6 +216,7 @@ class PriorAStarStrategy(_PriorAStar):
     """先验增强的重复 A*（完整版）：柱子规则推断墙 + 按墙密度自适应的未知边惩罚。"""
 
     name = "prior_astar"
+    ablation_baseline = "repeated_astar"  # 消融基线：两个机制都关闭时与它逐格相同
     use_post_rule = True
     penalty_scale = FROZEN_SCALE
 
@@ -224,6 +225,7 @@ class PriorAStarNoPostRule(_PriorAStar):
     """消融：去掉柱子规则，只保留自适应未知边惩罚。"""
 
     name = "prior_astar_no_post"
+    ablation_of = "prior_astar"
     use_post_rule = False
     penalty_scale = FROZEN_SCALE
 
@@ -232,6 +234,7 @@ class PriorAStarNoPenalty(_PriorAStar):
     """消融：去掉未知边惩罚（δ = 0），只保留柱子规则。"""
 
     name = "prior_astar_no_penalty"
+    ablation_of = "prior_astar"
     use_post_rule = True
     penalty_scale = None
     unknown_penalty = 0.0
@@ -241,6 +244,7 @@ class PriorAStarFixedPenalty(_PriorAStar):
     """消融：自适应惩罚换成开发集上最好的固定 δ，检验"自适应"本身的作用。"""
 
     name = "prior_astar_fixed"
+    ablation_of = "prior_astar"
     use_post_rule = True
     penalty_scale = None
     unknown_penalty = FROZEN_FIXED

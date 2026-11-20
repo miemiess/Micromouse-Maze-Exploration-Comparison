@@ -5,8 +5,8 @@ import unittest
 from pathlib import Path
 
 # 把项目的 src 目录加入搜索路径，以便导入环境模块。
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from environment import Direction as D, Maze, MazeEnvironment
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
+from core.environment import Direction as D, Maze, MazeEnvironment
 
 
 def maze(**changes):

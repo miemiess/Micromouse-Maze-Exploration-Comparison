@@ -10,7 +10,7 @@
 随机性：无，seed 参数被忽略。
 """
 
-from algorithm_api import DELTAS, OPPOSITE, Cell, Direction, Observation
+from core.algorithm_api import DELTAS, OPPOSITE, Cell, Direction, Observation
 
 
 class DfsStrategy:

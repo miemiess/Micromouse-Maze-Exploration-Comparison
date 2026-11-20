@@ -14,7 +14,7 @@
 import heapq
 from collections.abc import Callable, Iterable
 
-from algorithm_api import KNOWN_MAP, Cell, Maze, open_neighbours
+from core.algorithm_api import KNOWN_MAP, Cell, Maze, open_neighbours
 
 
 def manhattan_to_goals(cell: Cell, goals: Iterable[Cell]) -> int:

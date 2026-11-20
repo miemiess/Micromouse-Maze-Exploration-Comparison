@@ -10,7 +10,7 @@
 
 import random
 
-from algorithm_api import ORDER, Cell, Direction, Observation
+from core.algorithm_api import ORDER, Cell, Direction, Observation
 
 
 class RandomWalkStrategy:

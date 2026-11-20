@@ -11,8 +11,8 @@
 随机性：无。
 """
 
-from algorithm_api import ORDER, Cell, Direction, step_cell
-from dfs import DfsStrategy
+from core.algorithm_api import ORDER, Cell, Direction, step_cell
+from basic.algorithms.dfs import DfsStrategy
 
 
 def manhattan_to_goals(cell: Cell, goals) -> int:

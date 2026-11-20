@@ -1,8 +1,8 @@
 # 未知迷宫中电脑鼠探索算法的比较与分析：问题建模与算法选择
 
 > **文档状态**：中文初稿（2026-11-19，第 2 章已更新为正式实验结果），定稿后译为英文提交。
-> 第 2 章的数据来自按实验计划运行的正式实验（`results/standard/`，514 张地图 × 13 个算法，其中 4 个是第 4 章新方案及其消融变体）。
-> 第 4 章新方案与其他算法在同一次实验中运行（`results/standard/main/`），调参只用开发集（`results/standard/dev/`）。第 3 章及 4.6 节中标注“待实现”或“待验证”的内容尚无实验支持，只是设计与假设。
+> 第 2 章的数据来自按实验计划运行的正式实验（`results/basic/`，514 张地图 × 13 个算法，其中 4 个是第 4 章新方案及其消融变体）。
+> 第 4 章新方案与其他算法在同一次实验中运行（`results/basic/main/`），调参只用开发集（`results/basic/dev/`）。第 3 章及 4.6 节中标注“待实现”或“待验证”的内容尚无实验支持，只是设计与假设。
 
 ## 摘要
 
@@ -69,9 +69,9 @@
 
 | 模块 | 职责 | 文件 |
 | --- | --- | --- |
-| 环境 | 持有真实地图，提供观测，执行移动，统计步数与转向 | `src/environment.py` |
-| 算法 | **只**回答“下一步往哪走”，看不到真实地图 | `src/dfs.py` 等，每个算法一个文件 |
-| 统一接口与驱动 | 发现算法、按统一规则运行和计时 | `src/algorithm_api.py` |
+| 环境 | 持有真实地图，提供观测，执行移动，统计步数与转向 | `src/core/environment.py` |
+| 算法 | **只**回答“下一步往哪走”，看不到真实地图 | `src/basic/algorithms/dfs.py` 等，每个算法一个文件 |
+| 统一接口与驱动 | 发现算法、按统一规则运行和计时 | `src/core/algorithm_api.py` |
 | 可视化与实验 | 上位机演示、批量实验 | `tools/MazesTest/`、`results/` |
 
 ### 1.5 模式识别：与已知问题建立联系
@@ -104,7 +104,7 @@
 
 ### 2.1 候选算法与选择理由
 
-每个算法都有一个**纳入比较的理由**，而不是越多越好。完整的登记（信息假设、平局规则、失败条件、复杂度）见 [`Docs/algorithm-methods.md`](algorithm-methods.md)。
+每个算法都有一个**纳入比较的理由**，而不是越多越好。完整的登记（信息假设、平局规则、失败条件、复杂度）见 [`Docs/basic/algorithm-methods.md`](basic/algorithm-methods.md)。
 
 | 算法 | 类别 | 核心规则 | 为什么纳入 |
 | --- | --- | --- | --- |
@@ -142,7 +142,7 @@ V 为格子数（16×16 时为 256），E 为无墙的相邻边数（E ≤ 2V）
 
 ### 2.3 实验设置
 
-实验规则在运行前写入 [`Docs/experiment-plan.md`](experiment-plan.md)，运行后未修改。
+实验规则在运行前写入 [`Docs/basic/experiment-plan.md`](basic/experiment-plan.md)，运行后未修改。
 
 | 项 | 设置 |
 | --- | --- |
@@ -151,9 +151,9 @@ V 为格子数（16×16 时为 256），E 为无墙的相邻边数（E ≤ 2V）
 | 预算 | 移动 20 × 256 = 5120 步；计算 30 秒 |
 | 重复 | 每个（地图, 算法）组合运行 3 次，计算时间取中位数；3 次的路线全部一致 |
 | 随机性 | 主实验种子为 0；另做随机性实验：随机游走在 3 张核心迷宫上用种子 0～9 |
-| 驱动与计时 | `src/algorithm_api.run_episode`；只计算法自身，不含读图、绘图与动画（有测试验证） |
+| 驱动与计时 | `src/core/algorithm_api.run_episode`；只计算法自身，不含读图、绘图与动画（有测试验证） |
 | 软件 | Python 3.14.7；实验 1 共 6682 次运行（514 张 × 13 个算法，含第 4 章的新方案与消融变体），实验 2 共 30 次；全部用时约 8 分钟 |
-| 复现 | `python src/run_experiments.py --plan standard`；原始数据、汇总、元数据与图表见 `results/standard/` |
+| 复现 | `python src/run_experiments.py --plan basic`；原始数据、汇总、元数据与图表见 `results/basic/` |
 
 “步数 / 最短路”= 成功运行的步数 ÷ 已知地图 BFS 最短路长度，越接近 1 越好。由于少数地图会让比值非常大（例如 Flood-Fill 在外部迷宫库的一张地图上达到 29.7），下文同时给出**均值**和**中位数**；中位数更能代表“典型地图”上的表现。下文把 120 张生成迷宫按环路比例合并为三组，按生成器拆分的结果见 2.5 节发现 6。“无环”指生成树本身无环，只有中央 2×2 目标区内部拆墙后形成的一个小环。
 
@@ -186,7 +186,7 @@ V 为格子数（16×16 时为 256），E 为无墙的相邻边数（E ≤ 2V）
 | BFS 扩展节点（已知地图） | 220.1 | 85.0 | 79.5 | 86.4 |
 | A* 扩展节点（已知地图） | 197.0（−10%） | 57.0（−33%） | 36.1（−55%） | 26.9（−69%） |
 
-图表见 `results/standard/main/figures/`：`ratio_by_group.png`（按 13 个地图组的“步数 / 最短路”）、`success_by_group.png`（成功率）、`compute_time.png`（计算时间）、`expanded_nodes.png`（扩展节点）、`ablation.png`（第 4 章消融）。主图只含新方案的完整版，消融变体只出现在 `ablation.png` 与表 3。完整汇总见 `results/standard/main/summary.md`。
+图表见 `results/basic/main/figures/`：`ratio_by_group.png`（按 13 个地图组的“步数 / 最短路”）、`success_by_group.png`（成功率）、`compute_time.png`（计算时间）、`expanded_nodes.png`（扩展节点）、`ablation_prior_astar.png`（第 4 章消融）。主图只含新方案的完整版，消融变体只出现在 `ablation_prior_astar.png` 与表 3。完整汇总见 `results/basic/main/summary.md`。
 
 ### 2.5 分析
 
@@ -318,7 +318,7 @@ A* 与 BFS 找到的最短路长度完全相同（单位代价下必然如此）
 
 ## 4. 新解决方案：先验增强的重复 A*（基础规则下）
 
-> 状态：**已实现并完成实验**（README 任务 C1 / C2）。设计细节、伪代码与证明见 [`Docs/algorithm-design.md`](algorithm-design.md)，代码 `src/prior_astar.py`；它与第 2 章的全部算法在**同一次实验**中运行，结果见 `results/standard/main/`（消融图 `figures/ablation.png`）。
+> 状态：**已实现并完成实验**（README 任务 C1 / C2）。设计细节、伪代码与证明见 [`Docs/basic/algorithm-design.md`](basic/algorithm-design.md)，代码 `src/basic/algorithms/prior_astar.py`；它与第 2 章的全部算法在**同一次实验**中运行，结果见 `results/basic/main/`（消融图 `figures/ablation_prior_astar.png`）。
 >
 > **与已有工作的关系**：乐观假设与按需重规划来自重复 A*；柱子规则来自比赛规程（除目标区外没有 2×2 空地）；对不确定的边加代价是风险规避规划的常见思路。本组的工作是把它们放进同一个可消融的框架，并提出按在线估计的墙密度自适应调整惩罚。在完成文献核查前称为“本组提出的变体”，不宣称首创。
 
@@ -343,7 +343,7 @@ A* 与 BFS 找到的最短路长度完全相同（单位代价下必然如此）
 
 ### 4.3 实验设置
 
-- **开发集**：种子 101～110 生成的 120 张地图，与测试集不重叠。唯一参数 c 在其上按“步数 / 最短路”均值选取，结果为 c = 2.5（固定 δ 的消融变体也取 2.5），随后冻结（`results/standard/dev/tuning.md`）。
+- **开发集**：种子 101～110 生成的 120 张地图，与测试集不重叠。唯一参数 c 在其上按“步数 / 最短路”均值选取，结果为 c = 2.5（固定 δ 的消融变体也取 2.5），随后冻结（`results/basic/dev/tuning.md`）。
 - **测试集**：与第 2 章是同一次运行（514 张地图，每个组合 3 次），因此表 3 与表 1、表 2 的计时口径完全一致。
 - **消融**：只加柱子规则、只加自适应惩罚、柱子规则 + 固定 δ、完整版；基线为重复 A*。
 
@@ -368,7 +368,7 @@ A* 与 BFS 找到的最短路长度完全相同（单位代价下必然如此）
 - **自适应没有带来额外收益。** 两类地图的墙密度相近（内部边中墙的比例 0.42 对 0.47），学到的 δ 也相近（2.38 对 2.26），因此自适应 δ 与固定 δ 几乎相同。只看墙密度区分不出两类迷宫在结构上的差别。
 - **方法上的教训：分布偏移。** 开发集只有生成图，参数在一种分布上选定，在另一种分布上失效。开发集应按地图来源分层，例如留出一部分外部迷宫库地图。按实验计划，看过测试结果后不再修改参数，因此下面的检验只作为事后分析。
 
-**事后分析：按地图来源分层的开发集**（看过测试结果之后做的，**不是正式结论**；脚本与完整结果见 `results/standard/dev/posthoc_stratified.py`、`posthoc.md`）。外部迷宫库按固定种子抽出 20%（79 张）加入开发集，与 120 张生成图一起重新选 c，选取标准与正式流程相同；再在其余 315 张外部图 + 120 张生成测试图上评估。
+**事后分析：按地图来源分层的开发集**（看过测试结果之后做的，**不是正式结论**；脚本与完整结果见 `src/basic/posthoc_stratified.py`、`posthoc.md`）。外部迷宫库按固定种子抽出 20%（79 张）加入开发集，与 120 张生成图一起重新选 c，选取标准与正式流程相同；再在其余 315 张外部图 + 120 张生成测试图上评估。
 
 | 方法 | 留出集全部 | 外部图（315） | 生成图（120） | 外部图 + / − |
 | --- | --- | --- | --- | --- |
@@ -396,11 +396,12 @@ A* 与 BFS 找到的最短路长度完全相同（单位代价下必然如此）
 ## 6. 复现方式
 
 ```bash
-python -m unittest discover -s tests                 # 全部测试
-python src/run_experiments.py --plan standard        # 重新运行第 2 章的正式实验（约 9 分钟）
-python results/standard/dev/tune_dev.py               # 第 4 章开发集调参记录
-python src/run_experiments.py --plot results/standard/main   # 只从 CSV 重画第 2 章的图表
-python tools/MazesTest/maze_app.py                   # 上位机：实时运行、同屏对比、已知地图规划、批量实验
+python -m unittest discover -s tests                     # 全部测试（含基础规则回归测试）
+python src/run_experiments.py --plan basic               # 重新运行第 2、4 章的正式实验（约 8 分钟）→ results/basic/
+python src/basic/dev_tuning.py                           # 第 4 章开发集调参记录 → results/basic/dev/tuning.md
+python src/basic/posthoc_stratified.py                   # 第 4.5 节事后分析 → results/basic/dev/posthoc.md
+python src/run_experiments.py --plot results/basic/main  # 只从 CSV 重画第 2、4 章的图表
+python tools/MazesTest/maze_app.py                       # 上位机：实时运行、同屏对比、已知地图规划、批量实验
 ```
 
 ## 参考文献（待核查）
@@ -413,4 +414,4 @@ python tools/MazesTest/maze_app.py                   # 上位机：实时运行�
 - micromouseonline. micromouse_maze_tool（MIT 许可证）. https://github.com/micromouseonline/micromouse_maze_tool ，提交 12118e41（外部迷宫库的数据来源，转换说明见 `mazes/README.md`）
 - 电脑鼠比赛规程中关于迷宫结构的规定（除目标区外每根柱子至少连一面墙、目标区单入口），第 4 章柱子规则的依据；具体规程版本待核查。
 - I. Pohl. Heuristic search viewed as path finding in a graph. *Artificial Intelligence*, 1970.（加权 A*）
-- 沿墙法、DFS 回溯与 Flood-Fill 在电脑鼠领域为通用做法；第三方源码阅读记录见 [`Docs/algorithm-methods.md`](algorithm-methods.md) 第 5 节。
+- 沿墙法、DFS 回溯与 Flood-Fill 在电脑鼠领域为通用做法；第三方源码阅读记录见 [`Docs/basic/algorithm-methods.md`](basic/algorithm-methods.md) 第 5 节。
