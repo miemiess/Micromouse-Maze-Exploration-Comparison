@@ -36,3 +36,4 @@ Codex 2026-11-22 添加 E1 / E3 转弯代价验收迷宫，在基础环境中穷
 Luca 2026-11-22 重构 E0：规则抽象移入 src/core/rules.py（基础规则 + 叠加层，公共接口层不再导入扩展层），去掉 preview 占位规则；各页实现 set_rule，规则代价改为增量计价
 Luca 2026-11-22 完成 E1：src/ext/rules/turn_cost.py（步数 + λ×转向）、motion_time.py（梯形加减速 + 转向用时）、规则最优参照 src/ext/algorithms/rule_optimal.py；实验框架追加规则代价列与图；新增 test_turn_cost、test_motion_time
 Luca 2026-11-22 上位机规则面板：规则栈标签（基础规则 ＋ 彩色叠加层）、参数输入、整体换色；画布转弯点圆环与规则最优路线；规则指标框；对比表按规则代价评最优
+Luca 2026-11-22 为 E3 整理结构：新增 src/core/planning.py（KnownWalls、（格子, 朝向）Dijkstra / A* / 加权 A* 搜索、曼哈顿 + 转弯下界启发式），Ruleset.optimal_plan 改用它；算法类属性 designed_for（上位机加粗标记、metadata 分组）；探索算法的 stats() 并入运行统计；新增 test_planning（启发式不高估、A* 与 Dijkstra 同代价、扩展算法接入检查）；ext README 补懂规则算法的写法

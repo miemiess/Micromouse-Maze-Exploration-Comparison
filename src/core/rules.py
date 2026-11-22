@@ -16,7 +16,6 @@
 （tests/test_basic/test_regression.py）。
 """
 
-import heapq
 import importlib
 from collections.abc import Iterable
 from dataclasses import asdict, dataclass, fields
@@ -24,26 +23,20 @@ from pathlib import Path
 from typing import ClassVar
 
 from core.environment import Cell, Direction, Maze
+from core.planning import DELTAS, heading_search, maze_blocked, quarter_turns
 
 SRC = Path(__file__).resolve().parents[1]
 LAYER_PACKAGE = "ext.rules"   # 自动发现叠加层的包：每个模块定义 LAYERS = [层类, ...]
 DIMENSIONS = {"cost": "代价模型", "observation": "观测模型", "flow": "比赛流程"}
 
-_DELTAS = {Direction.NORTH: (0, 1), Direction.EAST: (1, 0),
-           Direction.SOUTH: (0, -1), Direction.WEST: (-1, 0)}
-_ORDER = tuple(Direction)  # N、E、S、W，顺时针
-
-
-def quarter_turns(a: Direction, b: Direction) -> int:
-    """从朝向 a 转到 b 需要的 90° 转向次数（0、1、2），与环境的 turns_90 计数一致。"""
-    diff = abs(_ORDER.index(a) - _ORDER.index(b)) % 4
-    return min(diff, 4 - diff)
+__all__ = ["DIMENSIONS", "RuleLayer", "CostLayer", "CostMeter", "Ruleset", "BASIC", "BASIC_COLOR",
+           "quarter_turns", "segments", "turn_points", "available_layers", "parse_rule", "preset_rules"]
 
 
 def _direction(a: Cell, b: Cell) -> Direction:
     """相邻格 a → b 的方向。"""
     delta = (b[0] - a[0], b[1] - a[1])
-    return next(d for d, v in _DELTAS.items() if v == delta)
+    return next(d for d, v in DELTAS.items() if v == delta)
 
 
 def segments(path: Iterable[Cell], start_heading: Direction) -> list[tuple[int, int]]:
@@ -241,6 +234,14 @@ class Ruleset:
         return next((l for l in self.layers if isinstance(l, CostLayer)), None)
 
     @property
+    def cost_model(self) -> CostLayer:
+        """规划用的代价模型：有代价层时为该层，基础规则为单位代价（每步 1、转向 0）。
+
+        算法在 configure(rule) 中取它交给 core.planning.heading_search，基础规则下也能运行。
+        """
+        return self.cost_layer or _UNIT
+
+    @property
     def changes_observation(self) -> bool:
         return any(layer.changes_observation for layer in self.layers)
 
@@ -298,59 +299,17 @@ class Ruleset:
     def optimal_plan(self, maze: Maze) -> tuple[float, list[Cell]] | None:
         """已知完整地图时，本规则代价最小的路线（含起点）及其代价；不可达时返回 None。
 
-        在（格子, 朝向）上做 Dijkstra：原地转 1 或 2 个 90°，或沿当前朝向直走 k 格（中途不能穿墙）。
-        基础规则用单位代价（每步 1、转向 0），结果长度等于 BFS 最短路。
+        用 core.planning.heading_search 在（格子, 朝向）上做 Dijkstra：原地转 1 或 2 个 90°，
+        或沿当前朝向直走 k 格（中途不能穿墙）。基础规则用单位代价，结果长度等于 BFS 最短路。
         """
-        layer = self.cost_layer or _UNIT
-        walls = maze.walls
-        goals = {tuple(g) for g in maze.goals}
-        start = (tuple(maze.start), maze.start_heading)
-        best = {start: 0.0}
-        parent: dict = {}
-        heap = [(0.0, 0, start)]
-        counter = 0
-        while heap:
-            cost, _, state = heapq.heappop(heap)
-            if cost > best.get(state, float("inf")):
-                continue
-            cell, heading = state
-            if cell in goals:
-                route = [cell]
-                while state in parent:
-                    state, cells = parent[state]
-                    route[:0] = cells
-                return round(cost, 6), route
-            moves = []
-            for other in Direction:
-                q = quarter_turns(heading, other)
-                if q:
-                    moves.append(((cell, other), layer.turn_cost(q), []))
-            dx, dy = _DELTAS[heading]
-            here, run = cell, []
-            while True:
-                nxt = (here[0] + dx, here[1] + dy)
-                if not (0 <= nxt[0] < maze.width and 0 <= nxt[1] < maze.height) \
-                        or frozenset((here, nxt)) in walls:
-                    break
-                run.append(here)
-                here = nxt
-                moves.append(((here, heading), layer.run_cost(len(run)), list(run)))
-                if here in goals:
-                    break   # 进入目标格时运行即结束，不能穿过目标继续直走
-            for nxt_state, step_cost, cells in moves:
-                total = cost + step_cost
-                if total < best.get(nxt_state, float("inf")) - 1e-12:
-                    best[nxt_state] = total
-                    parent[nxt_state] = (state, cells)
-                    counter += 1
-                    heapq.heappush(heap, (total, counter, nxt_state))
-        return None
+        result = heading_search(maze.start, maze.start_heading, maze.goals,
+                                maze_blocked(maze.width, maze.height, maze.walls), self.cost_model)
+        return (result.cost, result.route) if result.found else None
 
     def optimal_cost(self, maze: Maze) -> float | None:
         """optimal_plan 的代价部分。"""
         plan = self.optimal_plan(maze)
         return plan[0] if plan else None
-
 
 
 BASIC = Ruleset()

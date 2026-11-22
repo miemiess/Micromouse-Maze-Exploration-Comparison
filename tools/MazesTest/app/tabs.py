@@ -69,6 +69,14 @@ def rule_metrics(rule: Ruleset, snap, optimal) -> dict:
             "rule_cost_ratio": f"{ratio:.3f}" if ratio is not None else "-"}
 
 
+def algorithm_description(info, rule: Ruleset) -> str:
+    """算法说明行：扩展算法带 [EXT]，为当前规则设计的算法带“为 … 设计”。"""
+    tags = (["[EXT]"] if info.layer == "ext" else []) \
+        + ([f"为{'、'.join(l.title for l in rule.layers if l.key in info.designed_for)}设计"]
+           if info.designed_for_rule(rule) else [])
+    return " ".join([*tags, f"{info.module} · {info.doc}"])
+
+
 def rule_box_style(rule: Ruleset) -> str:
     """规则指标框的样式：规则颜色的边框与浅色底。"""
     return (f"QGroupBox {{ border:2px solid {rule.color}; border-radius:4px; margin-top:12px;"
@@ -453,7 +461,7 @@ class RunTab(QWidget):
         """按当前地图、算法、种子和预算新建 Runner。"""
         name = self.algorithm.currentText()
         info = self.strategies.get(name)
-        self.description.setText(f"{'[EXT] ' if info.layer == 'ext' else ''}{info.module} · {info.doc}" if info else "没有这一类算法")
+        self.description.setText(algorithm_description(info, self.rule) if info else "没有这一类算法")
         self.log.clear()
         if self.maze is None or info is None:
             self.runner = None

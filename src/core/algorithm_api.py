@@ -13,8 +13,10 @@
        上位机（tools/MazesTest）、批量实验和测试都使用这里的驱动，保证规则只有一份。
 
 新增算法：在 src/ext/algorithms/（基础规则已冻结，新算法一律放扩展层）中新建一个文件，写一个类，
-设置 name（唯一名称），按类别实现对应方法（以及可选的 debug_view / stats），
-参考 src/basic/algorithms/ 中的 dfs.py、flood_fill.py、wall_follower.py、bfs.py。
+设置 name（唯一名称），按类别实现对应方法（以及可选的 configure / debug_view / stats），
+参考 src/basic/algorithms/ 中的 dfs.py、flood_fill.py、wall_follower.py、bfs.py；
+需要按规则代价规划的算法用 core.planning（KnownWalls、heading_search、cost_lower_bound，本文件已转出）。
+写法与检查清单见 src/ext/README.md。
 
 本文件属于公共接口层（src/core/）：基础规则与扩展共用，修改时必须保持向后兼容，
 并通过 tests/test_basic/test_regression.py（基础规则结果不变）。
@@ -29,6 +31,7 @@ from time import perf_counter
 from typing import Protocol
 
 from core.environment import Cell, Direction, Maze, MazeEnvironment, Observation
+from core.planning import KnownWalls, SearchResult, cost_lower_bound, heading_search
 from core.rules import BASIC, Ruleset
 
 __all__ = [
@@ -39,6 +42,7 @@ __all__ = [
     "ExplorationStrategy", "KnownMapPlanner",
     "AlgorithmInfo", "discover_algorithms", "load_algorithm",
     "Snapshot", "Runner", "run_episode", "Ruleset", "BASIC",
+    "KnownWalls", "SearchResult", "cost_lower_bound", "heading_search",
 ]
 
 SRC = Path(__file__).resolve().parents[1]  # src/
@@ -123,6 +127,12 @@ class ExplorationStrategy(Protocol):
         choose_direction(observation) -> Direction | None   None 表示声明无路（no_path）
     可选实现：
         debug_view() -> dict           供上位机显示内部状态，格式见 tools/MazesTest/README.md
+        stats() -> dict                额外指标（如 replans、expanded_nodes），每次决策后读取并并入运行统计；
+                                       expanded_nodes 会写入实验 runs.csv
+        configure(rule) -> None        每次 reset 前收到当前规则（core.rules.Ruleset）
+    可选类属性：
+        designed_for = ("turn_cost",)  为哪些规则层设计（层 key）；只用于界面标记与实验分组，不限制运行
+        supported_rules = {...}        支持哪些改变观测的层；未声明时这类层拒绝运行
     """
 
     name: str
@@ -165,6 +175,8 @@ class AlgorithmInfo:
     layer：所在层，"basic"（基础规则，冻结）或 "ext"（扩展）。
     ablation_of：消融变体所属的完整算法名（类属性 ablation_of）；非空时不进主图，只进消融图。
     ablation_baseline：完整算法的消融基线算法名（类属性 ablation_baseline）。
+    supported_rules：声明支持的改变观测的层（类属性）；None 表示未声明。
+    designed_for：为哪些规则层设计（类属性，层 key）；只用于界面标记和实验分组，不限制运行。
     """
     name: str
     module: str
@@ -175,6 +187,11 @@ class AlgorithmInfo:
     ablation_of: str = ""
     ablation_baseline: str = ""
     supported_rules: frozenset[str] | None = None
+    designed_for: frozenset[str] = frozenset()
+
+    def designed_for_rule(self, rule: Ruleset) -> bool:
+        """算法是否为 rule 中叠加的某一层设计（基础规则下总为 False）。"""
+        return any(layer.key in self.designed_for for layer in rule.layers)
 
     def create(self):
         """新建一个算法对象（每次运行使用独立对象）。"""
@@ -239,10 +256,12 @@ def discover_algorithms(*, mode: str | None = None, layer: str | None = None
                                   f"{found[obj.name].module} 重复，已忽略")
                     continue
                 doc = (inspect.getdoc(obj) or "").splitlines()
+                supported = getattr(obj, "supported_rules", None)
                 found[obj.name] = AlgorithmInfo(
                     obj.name, module_name, obj.__name__, obj_mode, doc[0] if doc else "",
                     pkg_layer, getattr(obj, "ablation_of", ""), getattr(obj, "ablation_baseline", ""),
-                    frozenset(obj.supported_rules) if getattr(obj, "supported_rules", None) is not None else None)
+                    frozenset(supported) if supported is not None else None,
+                    frozenset(getattr(obj, "designed_for", ())))
     return dict(sorted(found.items())), errors
 
 
@@ -283,7 +302,7 @@ class Snapshot:
         replanned: 预测路线是否因新信息而改变（算法提供 plan 时才有意义）。
         debug: 算法 debug_view() 的返回值，可能为 None。
         stats: 实时统计，键与 MazeEnvironment.summary() 一致，另含 decisions、visited_cells、
-            coverage、observed_walls，以及已知地图规划器 stats() 提供的额外指标。
+            coverage、observed_walls，以及算法 stats() 提供的额外指标。
     """
     decision: int
     position: Cell
@@ -427,8 +446,8 @@ class Runner:
                 goals=frozenset(self.maze.goals), initial_heading=self.maze.start_heading,
                 seed=self.seed)
             self.compute_seconds += perf_counter() - started
+            self._read_stats()
             if self.mode == KNOWN_MAP:
-                self._extra_stats = self.strategy.stats()
                 self._update_debug()
         except Exception:
             self._fail()
@@ -459,6 +478,8 @@ class Runner:
             self.compute_seconds += perf_counter() - started
             self._decisions += 1
             replanned = self._update_debug()
+            if self.mode == EXPLORE:
+                self._read_stats()
 
             if self.compute_seconds > self.time_budget:
                 self.env.finish("timeout")
@@ -496,6 +517,11 @@ class Runner:
         self.error = traceback.format_exc(limit=4)
         if not self.finished:
             self.env.finish("error")
+
+    def _read_stats(self) -> None:
+        """读取算法 stats() 的额外指标（不计时）；没有实现时为空。"""
+        stats = getattr(self.strategy, "stats", None)
+        self._extra_stats = dict(stats()) if callable(stats) else {}
 
     def _record_walls(self, observation: Observation) -> frozenset[Edge]:
         """把当前格观测到的内部墙加入已观测集合，返回其中新出现的墙。"""
@@ -542,7 +568,7 @@ def run_episode(maze: Maze, algorithm, *, seed: int | None = None,
 
     Returns:
         MazeEnvironment.summary() 的全部字段，另含 algorithm、mode、maze_id、seed、error
-        以及已知地图规划器的额外指标。
+        以及算法 stats() 的额外指标。
     """
     runner = Runner(maze, algorithm, seed=seed, max_steps=max_steps, time_budget=time_budget, rule=rule)
     runner.run()

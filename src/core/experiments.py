@@ -211,7 +211,12 @@ class ExperimentRun:
             "finished": datetime.now().isoformat(timespec="seconds"),
             "git_commit": _git_commit(), "python": sys.version.split()[0],
             "platform": platform.platform(), "processor": platform.processor(),
-            "maps": len(self.maze_paths), "algorithms": self.algorithms, "seeds": self.seeds,
+            "maps": len(self.maze_paths), "algorithms": self.algorithms,
+            "algorithm_info": {name: {"layer": self.infos[name].layer, "mode": self.infos[name].mode,
+                                      "designed_for": sorted(self.infos[name].designed_for),
+                                      "designed_for_rule": self.infos[name].designed_for_rule(self.rule)}
+                               for name in self.algorithms},
+            "seeds": self.seeds,
             "repeats": self.repeats, "max_steps": self.max_steps or "20 × 格子数",
             "time_budget_seconds": 30.0, "measure_memory": self.measure_memory,
             "timing_scope": "只含算法 reset / plan / choose_direction；不含读图、环境检查、绘图与写盘",

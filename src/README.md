@@ -15,6 +15,7 @@ src/
     algorithm_api.py        共用工具、两类算法接口、自动发现、驱动 Runner / run_episode
     experiments.py          批量实验框架：运行、汇总、导出 CSV / 图表、实验计划注册（--plan）
     rules.py                规则接口：基础规则 + 叠加层、代价计算、规则最优路线、层的自动发现与解析（--rule）
+    planning.py             规划工具：已知墙 KnownWalls、（格子, 朝向）代价搜索 heading_search、启发式下界
   basic/                  基础规则层：16×16、每步代价 1、理想观测。冻结于标签 basic-rules-v1，只修 bug
     algorithms/             9 个已有算法 + 本组新方案 prior_astar（含 3 个消融变体）
     plan.py                 基础规则的实验计划（实验 1、2），注册为 --plan basic
@@ -83,6 +84,17 @@ src/
   的规则最优路线，已知地图规划器 `rule_optimal` 即用它。
 - 算法可实现 `configure(rule)`，每次策略重置或已知地图规划前调用；类属性 `supported_rules`（层 key 的集合）
   声明支持哪些**改变观测**的层，不改变观测的层（如代价层）对所有算法开放。
+- 所有算法在同一个算法库里，任何规则下都可直接运行（基础算法就是“不懂新规则”的对照组），不按规则拆分。
+  为某些层设计的算法用类属性 `designed_for = ("turn_cost",)` 声明：只用于上位机标记（规则颜色加粗）和
+  `metadata.json` 的 `algorithm_info` 分组，不限制运行。
+- 探索算法与已知地图规划器都可实现 `stats()`，每次决策后读取并并入运行统计；其中 `expanded_nodes` 写入 `runs.csv`。
+
+**规划工具（`core/planning.py`）**：扩展算法共用，不依赖具体规则（`algorithm_api` 已转出）。
+`KnownWalls`（在线记录已观测墙，`blocked` 按未知边视为通路给出乐观地图）；
+`heading_search(start, heading, goals, blocked, cost, heuristic=None, weight=1)`（（格子, 朝向）上的 Dijkstra / A* /
+加权 A*，边为原地转向或直走 k 格，返回 `SearchResult(cost, route, heading, expanded)`）；
+`cost_lower_bound(cost, cell, heading, goals)`（不高估的“曼哈顿直线代价 + 必需转向”启发式）。
+代价模型统一用 `rule.cost_model`（基础规则为单位代价）。`Ruleset.optimal_plan` 本身也调用 `heading_search`。
 - 命令行写法 `Ruleset.spec`：`basic`、`turn_cost:weight=2`、`motion_time:v_max=1`；`metadata.json` 的 `rule` 记录
   `key`、`spec`、`title` 与各层参数。正式计划使用计划内指定的规则，不能再用 `--rule` 指定。
 

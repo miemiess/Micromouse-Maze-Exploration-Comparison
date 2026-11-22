@@ -35,6 +35,7 @@
 | `src/ext/rules/turn_cost.py` | `TurnCostLayer(weight=λ)`：代价 = 步数 + λ × 90° 转向 |
 | `src/ext/rules/motion_time.py` | `MotionTimeLayer`：梯形 / 三角形速度曲线的直线段 + 固定转向用时；参数与来源见文件头；`equivalent_weight()` 换算 λ |
 | `src/ext/algorithms/rule_optimal.py` | 已知地图参照：当前规则下代价最小的路线（基础规则下等于 BFS 最短路） |
+| `src/core/planning.py` | 为 E3 准备的共用规划工具：`KnownWalls`（已知墙 + 乐观地图）、`heading_search`（（格子, 朝向）上的 Dijkstra / A* / 加权 A*，返回扩展状态数）、`cost_lower_bound`（曼哈顿 + 转弯下界启发式，已验证不高估）；`Ruleset.optimal_plan` 也用它 |
 
 代价模型统一采用“走—停—转”假设：路线拆成直线段与原地转向，总代价 = Σ 直线段代价 + Σ 转向代价。实际路线由 `CostMeter` 在运行中增量计价（每步 O(1)）；规则最优路线在（格子, 朝向）上做 Dijkstra，边为“转 1 / 2 个 90°”或“沿当前朝向直走 k 格”。测试用一个独立的逐格 Dijkstra 交叉验证了最优代价。
 
@@ -46,6 +47,8 @@
 - Strategy 接口不变；需要规则参数的算法可选实现 `configure(rule)`，Runner 在 `reset` 前调用。
 - 有代价层时，运行结果多一个 `rule_cost`（规则代价）；实验的 `runs.csv` 追加 `rule`、`rule_cost`、`optimal_rule_cost`、`rule_cost_ratio` 列，汇总表与图表另有规则代价部分。基础规则不追加任何字段。
 - 算法可声明 `supported_rules`；未声明时默认支持所有**不改变观测**的规则（基础算法在转弯代价规则下照常运行，作为“不懂规则”的对照）。改变观测的规则（噪声）只对声明支持的算法开放。
+- 算法不按规则拆分：全部在同一个算法库，任何规则下直接套用。为某些层设计的算法声明 `designed_for`（层 key），只用于上位机标记与 `metadata.json` 的 `algorithm_info` 分组，便于“基础算法 vs 懂规则的算法”同表比较。
+- 探索算法也可实现 `stats()`（每次决策后读取），`expanded_nodes` 写入 `runs.csv`，用于比较计算量（如 D* Lite 与全量重算）。
 - 噪声规则会改变“撞墙 = invalid_action”的公共规则（应改为“撞墙 = 一次准确观测、原地不动”），**必须先开 Issue 达成一致**，并同步修改 `src/README.md`。
 - 每次修改 `src/core/` 后运行 `tests/test_basic/test_regression.py`。
 

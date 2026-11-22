@@ -14,7 +14,7 @@
 from dataclasses import fields
 
 from PySide6.QtCore import QSignalBlocker, Qt, Signal
-from PySide6.QtGui import QColor
+from PySide6.QtGui import QBrush, QColor
 from PySide6.QtWidgets import (QComboBox, QDoubleSpinBox, QFrame, QHBoxLayout, QLabel, QPushButton,
                                QVBoxLayout, QWidget)
 
@@ -197,14 +197,24 @@ class RulePanel(QFrame):
 
 
 def update_algorithms(widget, infos, rule: Ruleset) -> None:
-    """按规则启用 / 禁用算法项（保留已有选择）；单选下拉框的当前项失效时改选第一个可用项。"""
+    """按规则启用 / 禁用算法项（保留已有选择）；单选下拉框的当前项失效时改选第一个可用项。
+
+    为当前规则叠加层设计的算法（类属性 designed_for）用规则颜色加粗显示，一眼区分“懂规则”的算法。
+    """
     with QSignalBlocker(widget):
         combo = isinstance(widget, QComboBox)
         for index in range(widget.count()):
             item = widget.model().item(index) if combo else widget.item(index)
             name = item.data(Qt.UserRole) or item.text()
-            enabled = rule.supports(infos[name])
-            item.setToolTip("" if enabled else f"该算法不支持{rule.title}")
+            info = infos[name]
+            enabled = rule.supports(info)
+            designed = info.designed_for_rule(rule)
+            font = item.font()
+            font.setBold(designed)
+            item.setFont(font)
+            item.setForeground(QBrush(QColor(rule.color)) if designed else QBrush())
+            item.setToolTip(f"该算法不支持{rule.title}" if not enabled
+                            else f"为{rule.title}设计" if designed else "")
             if combo:
                 item.setEnabled(enabled)
             else:
