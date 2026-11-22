@@ -17,7 +17,7 @@
 | E3 | 懂规则的探索：朝向 A* 及 w = 2 变体、D* Lite、最近前沿 | ✅ 完成（正式实验待做） | zhouying682 | `src/ext/algorithms/` · `test_turn_aware_astar.py`、`test_incremental_frontier.py` |
 | 撞墙处理 | 撞墙后原地转向继续、可靠接触反馈、累计上限（contact 维度的层） | ✅ 完成 | zhouying682（实现）、Luca（改为规则层） | `src/ext/rules/collision.py` · `test_collision.py` |
 | E2 | 噪声观测层 + 置信度（对数几率）重规划及“只信最近读数”消融 | ✅ 完成（传感器参数为假设，正式实验待做） | Luca | `src/ext/rules/noisy_sensor.py`、`src/ext/algorithms/belief_astar.py` · `test_noisy_sensor.py` |
-| 实验计划 | 扩展实验的问题、地图划分、算法、规则、指标、结论标准 | 🟡 **草稿待确认** | Luca | [`Docs/ext/experiment-plan.md`](experiment-plan.md) |
+| 实验计划 | 扩展实验的问题、地图划分、算法、规则、指标、结论标准 | ✅ 已冻结（2026-11-22） | Luca | [`Docs/ext/experiment-plan.md`](experiment-plan.md) |
 | 计划落地 | `src/ext/plan.py`（`--plan ext_turn` / `ext_noise`）、分层划分 `mazes/splits/ext_dev.json` | ✅ 完成 | Luca | `src/ext/plan.py` · `tests/test_ext/test_plan.py` |
 | 分析脚本 | `src/ext/analysis.py`：配对胜负、符号检验、λ 曲线、噪声曲线 | ⬜ 未开始 | — | — |
 | 正式结果 | 运行并分析，写入报告第 3 章、4.6 节 | ⬜ 未开始 | — | `results/ext/` |
@@ -27,7 +27,7 @@
 
 **下一步（按顺序）**
 
-1. **确认并冻结实验计划**（[`experiment-plan.md`](experiment-plan.md)）：冻结前不看测试集结果。
+1. ~~确认并冻结实验计划~~（已冻结，2026-11-22）。
 2. **写分析脚本** `src/ext/analysis.py`（配对胜负、符号检验、λ 曲线、噪声曲线；适合交给组员，配任务说明与验收测试）。
 3. **运行** `--plan ext_turn`（约 15 分钟）、`--plan ext_noise`（约 30 分钟）、`--plan ext_two_phase`（约 20 分钟），**分析并写报告**（含 D4 的描述性结果）。
 5. 收尾各项。

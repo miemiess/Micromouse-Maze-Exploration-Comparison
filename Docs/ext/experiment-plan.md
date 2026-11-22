@@ -1,6 +1,6 @@
 # 扩展阶段实验计划
 
-> 状态：**草稿，待组内确认后冻结**。冻结后按本计划运行，运行后不按结果修改规则；必须修改时写入文末“变更记录”并重跑受影响的实验。
+> 状态：**已冻结（2026-11-22，冻结时的提交见开发日志）**。按本计划运行，运行后不按结果修改规则；必须修改时写入文末“变更记录”并重跑受影响的实验。
 > 代码：[`src/ext/plan.py`](../../src/ext/plan.py)（注册为 `--plan ext_turn`、`--plan ext_noise`、`--plan ext_two_phase`）；D4 见 [`src/ext/difficulty.py`](../../src/ext/difficulty.py)；地图划分：[`mazes/splits/ext_dev.json`](../../mazes/splits/ext_dev.json)。
 
 ## 1. 要回答的问题
