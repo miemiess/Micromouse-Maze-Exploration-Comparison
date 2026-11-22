@@ -62,3 +62,4 @@ Luca 2026-11-22 报告 Docs/Result.md 写入扩展实验：3.6 设置、3.7 结�
 Luca 2026-11-23 事后验证 src/ext/posthoc.py（不属于冻结计划）：divisor 重算 X3 不同探索折算系数下的成绩，contact 去掉接触反馈并分解撞墙来源；报告发现 11、12 按结果改写（发现 11 原解释“接触反馈替代累积证据”不成立，改为“兜底规划抵消融合的收益”；发现 12 补充 D = 1～100 与逐图配对），3.9、第 5 章同步；看板标注 E2、E3、D5 实验已完成
 Luca 2026-11-23 新增 belief_astar_soft（冻结后新增的改进）：core/planning.heading_search 增加可选 edge_penalty；兜底规划给 S > 0 的边加代价 K·e^S，K = 0.25 在开发集选定；噪声子集上撞墙显著减少、步数相当；报告发现 11、3.5、3.9、第 5、6 章同步
 Luca 2026-11-23 扩展阶段标记为完成（README 进度与任务表、进度看板）；README 增加扩展阶段主要结论；剩余为全项目收尾
+Luca 2026-11-23 最终报告前的结构整理：README 重写为最终指引（项目状态、阅读入口、主要结论、收尾清单、分工与贡献）；Docs/basic/demo-guide.md 移到 Docs/demo-guide.md 并补充扩展演示；Docs/ext/dev-plan.md 改为 Docs/ext/design.md（去掉进度看板与任务表）；删除 tools/README.md；各 README 去掉“开发中 / 待认领”等过时内容

@@ -9,7 +9,7 @@
 | `basic/main/` | 基础规则实验 1（主对比）：514 张地图 × 13 个算法（含 C2 新方案 `prior_astar` 及 3 个消融变体），每组合重复 3 次；`figures/ablation_prior_astar.png` 为 C2 消融图。计划：[`Docs/basic/experiment-plan.md`](../Docs/basic/experiment-plan.md) |
 | `basic/randomness/` | 基础规则实验 2（随机性）：随机游走在 3 张核心迷宫上用种子 0～9 |
 | `basic/dev/` | C2 开发集（种子 101～110，不属于任何实验）：调参记录 `tuning.md`（`src/basic/dev_tuning.py`）；事后分析 `posthoc.md`（`src/basic/posthoc_stratified.py`，看过测试结果后做的，不是正式结论） |
-| `basic/demo/` | 基础规则演示图片与 GIF（[`Docs/basic/demo-guide.md`](../Docs/basic/demo-guide.md)） |
+| `basic/demo/` | 基础规则演示图片与 GIF（[`Docs/demo-guide.md`](../Docs/demo-guide.md)） |
 | `ext/` | 扩展阶段的正式结果，按规则或实验分子目录（见 [`ext/README.md`](ext/README.md)） |
 | `local/` | 自选实验、上位机批量实验与导出图片的默认位置；**不提交**（`.gitignore`） |
 

@@ -1,52 +1,30 @@
-# 扩展阶段开发计划（ext）
+# 扩展阶段设计（ext）
 
-> 本文是扩展阶段的**唯一路线图与进度看板**：先看第 0 节“现在到哪了、下一步做什么”，再看后面各节的设计与约定。
-> 基础规则阶段已完成并冻结（标签 `basic-rules-v1`，代码 `src/basic/`，结果 `results/basic/`）。任务认领见根目录 README 的任务表；
-> 交给组员或 AI 执行的子任务说明放在 `Docs/ext/tasks/`（验收通过后删除，结果记入本文与开发日志 `Docs/log.txt`）。
+> 扩展阶段**已完成**。本文记录扩展规则的设计、接入约定与实验约定，供写报告和检查代码时查阅。
+> 结果与结论见报告第 3 章与 [`results/ext/README.md`](../../results/ext/README.md)；实验计划见 [`experiment-plan.md`](experiment-plan.md)；
+> 代码与算法清单见 [`src/ext/README.md`](../../src/ext/README.md)；开发过程见 `Docs/log.txt`。
 
-## 0. 进度看板
+## 0. 完成情况
 
-最后更新：2026-11-23。每完成一项（或改变计划）就更新本节。
-
-**一句话**：**扩展阶段已完成。** 扩展规则的 4 个维度（代价、观测、撞墙处理、比赛流程）全部实现；扩展算法 11 个（含 D5 的有界提前停止，以及冻结后新增的改进 `belief_astar_soft`）；按冻结计划完成 X1～X4，事后验证了发现 11、12（`results/ext/posthoc/`）；结果与分析已写入报告第 3 章（3.6～3.10）与 4.6 节（[`results/ext/README.md`](../../results/ext/README.md) 有结论摘要）。**剩下的是全项目收尾**（英文定稿、参考文献与参数来源核查、贡献记录、在干净提交上重跑）。
-
-| 项 | 内容 | 状态 | 负责 | 代码 / 测试 |
+| 项 | 内容 | 负责 | 代码 · 测试 | 报告 |
 | --- | --- | --- | --- | --- |
-| E0 | 规则框架：基础规则 + 叠加层、`--rule`、上位机规则面板 | ✅ 完成 | Luca | `src/core/rules.py` · `tests/test_ext/test_rules.py` |
-| E1 | 代价层：转弯代价、运动时间；规则最优参照 `rule_optimal` | ✅ 完成（运动参数来源待核查） | Luca | `src/ext/rules/turn_cost.py`、`motion_time.py` · `test_turn_cost.py`、`test_motion_time.py` |
-| E3 | 懂规则的探索：朝向 A* 及 w = 2 变体、D* Lite、最近前沿 | ✅ 完成（X1 已评估，报告 3.7～3.8） | zhouying682 | `src/ext/algorithms/` · `test_turn_aware_astar.py`、`test_incremental_frontier.py` |
-| 撞墙处理 | 撞墙后原地转向继续、可靠接触反馈、累计上限（contact 维度的层） | ✅ 完成 | zhouying682（实现）、Luca（改为规则层） | `src/ext/rules/collision.py` · `test_collision.py` |
-| E2 | 噪声观测层 + 置信度（对数几率）重规划及“只信最近读数”消融 | ✅ 完成（X2 已评估；事后验证与改进 `belief_astar_soft` 见报告发现 11；传感器参数为假设） | Luca | `src/ext/rules/noisy_sensor.py`、`src/ext/algorithms/belief_astar.py` · `test_noisy_sensor.py` |
-| 实验计划 | 扩展实验的问题、地图划分、算法、规则、指标、结论标准 | ✅ 已冻结（2026-11-22） | Luca | [`Docs/ext/experiment-plan.md`](experiment-plan.md) |
-| 计划落地 | `src/ext/plan.py`（`--plan ext_turn` / `ext_noise`）、分层划分 `mazes/splits/ext_dev.json` | ✅ 完成 | Luca | `src/ext/plan.py` · `tests/test_ext/test_plan.py` |
-| 分析脚本 | `src/ext/analysis.py`：配对胜负、符号检验、分组一致性、λ / 噪声 / ε 曲线 | ✅ 完成 | Luca | `src/ext/analysis.py` · `test_analysis.py` |
-| 正式结果 | X1～X3 运行与分析，写入报告第 3 章、4.6 节 | ✅ 完成 | Luca | `results/ext/`、`results/ext/analysis/report.md` |
-| D5 | 两阶段比赛（探索 + 返回 + 冲刺）与 ε 提前停止（近似算法，冲刺代价 ≤ (1 + ε) × 最优，已用测试验证） | ✅ 完成（X3 已评估，报告 3.7～3.8；计分系数 1/30 来源待核查） | Luca | `src/ext/rules/two_phase.py`、`src/ext/algorithms/bounded_explore.py` · `test_two_phase.py` |
-| D4 | 迷宫难度特征与基础结果的相关（描述性）、模拟退火对抗迷宫 | ✅ 完成（结果：`results/ext/difficulty/`） | Luca | `src/ext/difficulty.py` · `test_difficulty.py` |
-| 收尾 | 运动 / 传感器参数来源核查、文献核查、英文定稿、贡献记录、干净提交上重跑全部实验 | ⬜ 未开始 | 全员 | `Docs/Result.md` |
+| E0 | 规则框架：基础规则 + 叠加层、`--rule`、上位机规则面板 | Luca | `src/core/rules.py` · `test_rules.py` | 3.1 |
+| E1 | 代价层：转弯代价、运动时间；规则最优参照 `rule_optimal` | Luca | `src/ext/rules/turn_cost.py`、`motion_time.py` · `test_turn_cost.py`、`test_motion_time.py` | 3.4 |
+| E3 | 朝向 A* 及 w = 2 变体、D* Lite、最近前沿 | zhouying682 | `src/ext/algorithms/` · `test_turn_aware_astar.py`、`test_incremental_frontier.py` | 3.2、3.3；X1 |
+| 撞墙处理 | 撞墙后原地转向继续、可靠接触反馈、累计上限 | zhouying682、Luca | `src/ext/rules/collision.py` · `test_collision.py` | 3.4 |
+| E2 | 噪声观测层、置信度重规划、消融与改进 `belief_astar_soft` | Luca | `src/ext/rules/noisy_sensor.py`、`src/ext/algorithms/belief_astar.py` · `test_noisy_sensor.py` | 3.4；X2；发现 11 |
+| D5 | 两阶段比赛与 ε 有界提前停止 | Luca | `src/ext/rules/two_phase.py`、`src/ext/algorithms/bounded_explore.py` · `test_two_phase.py` | 3.3；X3；发现 12 |
+| D4 | 迷宫难度特征与对抗迷宫（描述性） | Luca | `src/ext/difficulty.py` · `test_difficulty.py` | X4；发现 14 |
+| 实验 | 冻结计划、分层划分、X1～X4、分析、事后验证 | Luca | `src/ext/plan.py`、`analysis.py`、`posthoc.py` · `test_plan.py`、`test_analysis.py`、`test_posthoc.py` | 3.6～3.10 |
 
-**下一步（按顺序）**
-
-1. ~~确认并冻结实验计划~~（已冻结，2026-11-22）。
-2. ~~写分析脚本~~、~~运行 X1～X3~~（已完成，2026-11-22）。
-3. ~~写报告第 3 章、4.6 节~~（已完成，2026-11-22：3.6 设置、3.7 结果表 4～8、3.8 发现 7～14、3.9 算法选择、3.10 有效性威胁；摘要、第 5、6 章同步更新）。
-4. ~~事后验证发现 11、12；实现按置信度加代价的兜底规划~~（已完成，2026-11-23：`src/ext/posthoc.py`、`belief_astar_soft`）。
-5. **收尾**：英文定稿、参考文献与参数来源核查、贡献记录、在干净提交上重跑全部实验。
-
-**不做**（列为后续工作，见报告第 5 章）：用元启发式为评分权重调参（报告 3.2 节）；把按置信度加代价推广到正常规划。
-
-**已做的决定**（不再讨论）
+**已做的决定**
 
 - 算法不按规则拆分，全部在同一个算法库；为某规则设计的算法用 `designed_for` 标记。
 - 撞墙处理是普通叠加层（contact 维度），不叠加时保持基础规则“首次撞墙即 invalid_action”；噪声观测层默认撞墙后继续。
 - 噪声下撞墙反馈总是可靠；外圈边界总是读对。
 - 运动时间与传感器准确率的默认值是仿真假设，报告中如实标注，可用参数覆盖。
 
-**已知问题 / 待核查**
-
-- 运动时间模型的 v_max、accel、转向用时，噪声层的前 / 侧 / 后准确率：都没有实测或文献来源。
-- ~~置信度重规划在噪声下撞墙较多~~：已分析（报告发现 11，原因是兜底规划无视全部读数），改进版 `belief_astar_soft` 撞墙减少 20%～68%。
-- 上位机规则面板叠加 3 层时最小宽度约 1330 像素。
+**尚未核查**（列入根目录 README 的收尾清单）：运动时间模型的 v_max、accel、转向用时与噪声层的前 / 侧 / 后准确率都没有实测或文献来源；两阶段计分中 1/30 的来源。
 
 ## 1. 目标
 
@@ -101,7 +79,7 @@
 - 撞墙规则：基础规则仍是“首次撞墙 = invalid_action”；叠加撞墙处理层或噪声层后改为“撞墙 = 一次可靠的接触观测、原地转向不移动”（已定，见 `src/README.md` 的“撞墙处理”）。
 - 每次修改 `src/core/` 后运行 `tests/test_basic/test_regression.py`。
 
-## 3. 上位机：规则切换必须一眼可见
+## 3. 上位机：规则切换一眼可见
 
 仍用同一个上位机（`tools/MazesTest`）。规则面板（`tools/MazesTest/app/rule_bar.py`）横跨主窗口顶部、始终可见，把“基础规则 + 叠加层”直接画出来（**已实现**）：
 
@@ -120,20 +98,9 @@
 
 切换规则时，有正在进行或未完成的运行先确认；确认后各页从起点重新运行（当前所在页与地图不变），批量实验先导出已完成的记录。命令行可直接以某规则启动：`python tools/MazesTest/maze_app.py --rule turn_cost:weight=2`。
 
-## 4. 阶段与任务
+## 4. 研究主线与验收样例
 
-| 阶段 | 任务 | 内容 | 产出位置 | 完成标准 |
-| --- | --- | --- | --- | --- |
-| **0. 基础设施** ✅ | E0 | `Ruleset`（基础规则 + 叠加层）；`Runner` / `run_episode` / 实验框架的 `rule` 参数；`--rule` 命令行；上位机规则面板 | `src/core/rules.py`、`tools/MazesTest/app/rule_bar.py` | 已完成：回归测试通过；`tests/test_ext/test_rules.py` |
-| **1. 转弯代价与启发式搜索** | E1 ✅、E3 开发完成 | E1 已完成：转弯代价与运动时间模型两个代价层、规则最优参照 `rule_optimal`（`tests/test_ext/test_turn_cost.py`、`test_motion_time.py`）。E3-1 已验收（`turn_aware_astar`、`turn_aware_astar_w2`，见 `tests/test_ext/test_turn_aware_astar.py`）。E3 已实现：（格子, 朝向）状态上的 A*（不高估的“曼哈顿 + 转弯下界”启发式）；加权 A*（f = g + w·h，路径 ≤ w 倍最优）；D* Lite（单位步长的增量重算）、最近前沿探索（沿确认通路导航） | `src/ext/rules/`、`src/ext/algorithms/` | 实验计划先写好；λ / w 只在分层开发集上调；基础算法与懂规则的算法同表比较 |
-| **2. 两阶段与近似算法** ✅ | D5 | 探索 + 冲刺；停止判据：乐观代价 O 与悲观代价 P 满足 P ≤ (1 + ε)·O 时停止，冲刺代价 ≤ (1 + ε)·最短路（ε = 0 时即证明最优后停止） | `src/ext/rules/two_phase.py`、`src/ext/algorithms/` | 判据可证明；“探索 + 冲刺总代价”随 ε 的曲线 |
-| **3. 噪声观测** ✅ | E2、撞墙处理 | 已完成：噪声观测层、撞墙处理层、置信度重规划 `belief_astar` 与消融 `belief_astar_naive`（`tests/test_ext/test_noisy_sensor.py`、`test_collision.py`）。X2 已完成 | `src/ext/rules/noisy_sensor.py`、`collision.py`、`src/ext/algorithms/belief_astar.py` | 多种子重复，报告均值与离散程度；准确率曲线 |
-| **可选研究** ✅ | D4 | 迷宫难度刻画（环路比例、死胡同比例、分岔数、“欺骗度”）；用模拟退火对抗式生成最坏迷宫 | `src/ext/`、`results/ext/` | 特征与算法表现的关系分析 |
-| **收尾** | 全员 | ~~报告第 3 章填入扩展结果~~（已完成）；英文定稿；参考文献核查；贡献记录；在干净提交上重跑全部实验 | `Docs/Result.md` | 课程交付项全部覆盖 |
-
-四种已接入的探索策略、已知地图参照和可运行的转弯迷宫示例见[扩展算法说明](../../src/ext/README.md#已实现的算法)。[正式对照计划](experiment-plan.md)已固定分层地图、规则参数和指标，覆盖朝向 A* 两种权重、D* Lite 与最近前沿。转弯加权 Flood-Fill、加权评分与元启发式调参仍是候选方向。
-
-**建议主线：“乐观假设的代价”**——乐观规划什么时候会被误导（难度刻画、对抗迷宫）？换成转弯代价、两阶段规则后，结论是否仍然成立？用一条主线串起算法与实验，避免罗列结果。
+**主线：“乐观假设的代价”**——乐观规划什么时候会被误导（难度刻画、对抗迷宫）？换成转弯代价、噪声观测、两阶段规则后，结论是否仍然成立？报告第 3 章按这条主线组织。
 
 **E1 / E3 已知地图验收样例。** [4×5 转弯迷宫](../../tests/test_ext/fixtures/turn_cost_tradeoff.json) 从左下角朝东出发。穷举得到两条简单路径。锯齿路线 `ENENEN` 为 6 步、5 次直角转向，外圈路线 `NNNNEEES` 为 8 步、3 次直角转向（含起步向北）。按“步数 + λ × 转向次数”计分，在 λ = 0.5、1、2 时最优代价分别为 8.5、11、14；λ = 1 时两条路线都应通过验收。
 
@@ -142,7 +109,7 @@
 - **先写计划再运行**（当前计划：[`experiment-plan.md`](experiment-plan.md)）：每个扩展实验在 `Docs/ext/` 写实验计划（问题、地图、算法、参数候选、选取标准、指标），运行后不按结果改规则；改了要写变更记录并重跑。
 - **开发集按地图来源分层**（基础阶段的教训，见报告 4.5）：划分固定在 `mazes/splits/ext_dev.json`（由 `src/ext/plan.py` 用固定种子计算，测试检查两者一致），开发集同时包含生成图与 20% 外部迷宫库地图；这部分外部图不进扩展测试集。
 - **同一次运行、同一计时口径**：新方案与对照算法在同一个实验中运行；消融变体用类属性 `ablation_of` 声明，自动只进消融图。
-- **结果目录**：`results/ext/<规则或实验名>/`，由 `src/ext/plan.py` 的 `PLANS` 注册，当前计划为 `ext_turn` 和 `ext_noise`，可用 `--dry-run` 预览设置与输出目录。
+- **结果目录**：`results/ext/<规则或实验名>/`，由 `src/ext/plan.py` 的 `PLANS` 注册，计划为 `ext_turn`、`ext_noise`、`ext_two_phase`，可用 `--dry-run` 预览设置与输出目录。
 - **有随机性的设置**（噪声）：多种子重复，报告均值与离散程度。
 
 ## 6. 与现实的对应（用于报告的问题定义与局限分析）

@@ -21,10 +21,14 @@ src/
     plan.py                 基础规则的实验计划（实验 1、2），注册为 --plan basic
     dev_tuning.py           C2 开发集调参 → results/basic/dev/tuning.md
     posthoc_stratified.py   事后分析：分层开发集 → results/basic/dev/posthoc.md
-  ext/                    扩展层（开发中）：新规则与为新规则写的算法，见 ext/README.md
-    rules/                  叠加层：turn_cost.py（转弯代价）、motion_time.py（运动时间）、noisy_sensor.py（噪声观测）、collision.py（撞墙处理）
-    algorithms/             扩展算法（自动发现扫描本目录）：rule_optimal.py（规则最优参照）
-    plan.py                 扩展实验计划：--plan ext_turn、--plan ext_noise（地图划分 mazes/splits/ext_dev.json）
+  ext/                    扩展层：新规则与为新规则写的算法，见 ext/README.md
+    rules/                  叠加层：turn_cost.py（转弯代价）、motion_time.py（运动时间）、noisy_sensor.py（噪声观测）、
+                            collision.py（撞墙处理）、two_phase.py（两阶段比赛）
+    algorithms/             11 个扩展算法（自动发现扫描本目录），清单见 ext/README.md
+    plan.py                 扩展实验计划：--plan ext_turn、ext_noise、ext_two_phase（地图划分 mazes/splits/ext_dev.json）
+    analysis.py             扩展实验分析（配对检验、曲线）→ results/ext/analysis/
+    difficulty.py           迷宫难度特征与对抗迷宫 → results/ext/difficulty/
+    posthoc.py              事后验证（不属于冻结计划）→ results/ext/posthoc/
 ```
 
 **新代码放哪里**：
@@ -32,7 +36,7 @@ src/
 | 要做的事 | 位置 | 说明 |
 | --- | --- | --- |
 | 新算法（任何规则） | `src/ext/algorithms/<名称>.py` | 一个文件一个算法（或一组变体）；自动发现，无需改其他文件 |
-| 新规则（转弯代价、两阶段、噪声…） | `src/ext/rules/<名称>.py` | 设计见 `Docs/ext/dev-plan.md`；不修改 `core/environment.py` 的基础语义 |
+| 新规则（转弯代价、两阶段、噪声…） | `src/ext/rules/<名称>.py` | 设计见 `Docs/ext/design.md`；不修改 `core/environment.py` 的基础语义 |
 | 新实验计划 | `src/ext/plan.py` 中的 `PLANS` | 结果写到 `results/ext/<名称>/` |
 | 公共工具（多层共用） | `src/core/` | 必须向后兼容；回归测试必须通过 |
 | 修基础规则算法的 bug | `src/basic/algorithms/` | 只修 bug，不改行为；改了行为会被回归测试拦下 |

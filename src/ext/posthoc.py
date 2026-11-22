@@ -41,7 +41,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "src"))
 from core.environment import Observation  # noqa: E402
-from ext.analysis import paired, verdict  # noqa: E402
+from ext.analysis import load, paired, verdict  # noqa: E402
 from ext.algorithms.belief_astar import BeliefAStarNaive, BeliefAStarStrategy  # noqa: E402
 
 RESULTS = ROOT / "results" / "ext"
@@ -59,11 +59,6 @@ def fmt(result: dict) -> str:
 DIVISORS = (1, 2, 4, 6, 8, 10, 15, 20, 30, 60, 100)
 BOUNDED = ("bounded_explore_e0", "bounded_explore_e10", "bounded_explore_e25")
 ARRIVE = ("repeated_astar", "flood_fill", "turn_aware_astar")
-
-
-def load(path: Path) -> list[dict]:
-    with path.open(encoding="utf-8") as f:
-        return list(csv.DictReader(f))
 
 
 def rescore(rows: list[dict], divisor: float) -> list[dict]:

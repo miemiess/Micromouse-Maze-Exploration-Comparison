@@ -1,6 +1,6 @@
 # 扩展层（ext）
 
-**状态：开发中。** 在基础规则之上放宽假设（转弯代价、运动时间、两阶段比赛、传感器噪声），并加入启发式搜索与近似算法。路线图、任务与验收标准见 [`Docs/ext/dev-plan.md`](../../Docs/ext/dev-plan.md)。
+**状态：已完成。** 在基础规则之上放宽假设（转弯代价、运动时间、两阶段比赛、传感器噪声），并加入启发式搜索与近似算法。设计与完成情况见 [`Docs/ext/design.md`](../../Docs/ext/design.md)，结果见报告第 3 章与 [`results/ext/`](../../results/ext/README.md)。
 
 ## 放什么
 
@@ -47,7 +47,7 @@ python tools/MazesTest/maze_app.py tests/test_ext/fixtures/turn_cost_tradeoff.js
 6. **测试**：放在 `tests/test_ext/`，文件名以 `test_` 开头。扩展算法会自动进入
    `tests/test_ext/test_planning.py` 的接入检查：在每套预置规则下、几张固定地图上必须成功到达且规则代价口径一致。
 
-## 写一个懂规则的探索算法（E3 起）
+## 写一个懂规则的探索算法
 
 算法照常实现探索接口；规则从 `configure(rule)` 拿，搜索用 `core.planning`，不要自己再写一套已知墙和 Dijkstra：
 

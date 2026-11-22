@@ -30,24 +30,24 @@ git status
 git pull --no-rebase origin main
 ```
 
-先确保工作区干净；如已有未提交修改，按下一节先检查和提交自己的修改，再拉取。认领 README 任务行，告诉大家自己将修改哪些文件。小步提交，避免数天后才同步。
+先确保工作区干净；如已有未提交修改，按下一节先检查和提交自己的修改，再拉取。先在组内说明自己将修改哪些文件（报告按章节分工，避免同时改同一章）。小步提交，避免数天后才同步。
 
 ## 3. 上传本次工作
 
-以新增一个扩展算法为例，先检查差异，只暂存自己的文件。以下路径按实际修改替换，不要盲目复制尚未存在的文件名。
+以修改报告为例，先检查差异，只暂存自己的文件。以下路径按实际修改替换。
 
 ```bash
 git status
 git diff
-git add src/ext/algorithms/turn_weighted_astar.py tests/test_ext/test_turn_weighted_astar.py
+git add Docs/Result.md Docs/log.txt
 git diff --cached
-git commit -m "E3：实现转弯加权 A*"
+git commit -m "报告：校对第 3 章表 4～8"
 git pull --no-rebase origin main
 git push origin main
 git status
 ```
 
-提交前确认没有密码、令牌、缓存、虚拟环境或无关文件。文件按层放置：基础规则已冻结（`src/basic/`、`results/basic/`、`Docs/basic/`，只修 bug），新工作放扩展层（`src/ext/`、`results/ext/`、`Docs/ext/`、`tests/test_ext/`），公共接口 `src/core/` 修改须向后兼容；地图放 `mazes/classic/`；自选实验输出在 `results/local/`，不提交。README 任务状态更新也需要明确暂存和提交。完成后到 GitHub 页面检查文件和提交记录。
+提交前确认没有密码、令牌、缓存、虚拟环境或无关文件。文件按层放置：基础规则已冻结（`src/basic/`、`results/basic/`、`Docs/basic/`，只修 bug），新工作放扩展层（`src/ext/`、`results/ext/`、`Docs/ext/`、`tests/test_ext/`），公共接口 `src/core/` 修改须向后兼容；地图放 `mazes/classic/`；自选实验输出在 `results/local/`，不提交。勾掉 README 收尾清单中的项目也需要明确暂存和提交。完成后到 GitHub 页面检查文件和提交记录。
 
 ## 4. 推送被拒绝怎么办
 
