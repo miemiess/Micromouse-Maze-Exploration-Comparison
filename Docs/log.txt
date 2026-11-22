@@ -52,3 +52,6 @@ Luca 2026-11-22 Docs/ext/dev-plan.md 新增“进度看板”（状态、负责�
 Luca 2026-11-22 扩展实验计划草稿 Docs/ext/experiment-plan.md（Q1～Q6、按来源分层划分、配对符号检验与分组一致的结论标准）；src/ext/plan.py 注册 --plan ext_turn / ext_noise，划分写入 mazes/splits/ext_dev.json；新增 test_plan
 zhouying682 2026-11-22 接入 E1/E3 代价对照计划与地图划分，统一批量碰撞统计并同步结果说明；133 项测试通过。
 zhouying682 2026-11-22 完善 E1/E3 与 E2 实验计划，接入 ext-noise 和无运行预览，统一预览与元数据字段；135 项测试通过。
+Luca 2026-11-22 完成 D5：两阶段比赛规则层 src/ext/rules/two_phase.py（到达目标后可继续探索，返回起点后沿已确认通路冲刺，成绩 = 冲刺 + 探索 / 30）与有界提前停止 src/ext/algorithms/bounded_explore.py（P ≤ (1 + ε)·O 时停止，冲刺代价 ≤ (1 + ε) 倍最优）；环境新增 stop_at_goal，规则层新增 summarize 钩子；实验计划新增 X3（--plan ext_two_phase）
+Luca 2026-11-22 合并 zhouying682 的计划接入：保留 --dry-run、碰撞统计列等通用改进，计划与划分以本地版本为准
+Luca 2026-11-22 完成 D4：src/ext/difficulty.py（难度特征、与基础实验 1 的 Spearman 相关、模拟退火对抗迷宫），结果写入 results/ext/difficulty/；实验计划新增 Q8 / X4（描述性）

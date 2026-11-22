@@ -6,9 +6,10 @@
 
 | 目录 / 文件 | 内容 | 状态 |
 | --- | --- | --- |
-| `rules/` | 叠加层（`core.rules.RuleLayer` 子类，模块中列入 `LAYERS` 即被自动发现）：代价模型、观测模型、撞墙处理、比赛流程 | 已有 `turn_cost.py`（转弯代价，E1）、`motion_time.py`（运动时间模型，E1）、`noisy_sensor.py`（噪声观测，E2）、`collision.py`（撞墙处理） |
+| `rules/` | 叠加层（`core.rules.RuleLayer` 子类，模块中列入 `LAYERS` 即被自动发现）：代价模型、观测模型、撞墙处理、比赛流程 | 已有 `turn_cost.py`（转弯代价，E1）、`motion_time.py`（运动时间模型，E1）、`noisy_sensor.py`（噪声观测，E2）、`collision.py`（撞墙处理）、`two_phase.py`（两阶段比赛，D5） |
 | `algorithms/` | 为扩展规则编写的算法，每个算法一个文件；自动发现扫描本目录。共用的搜索与已知墙在 `core/planning.py` | 已有 `rule_optimal.py`（已知地图上的规则最优参照）；E3 探索策略：`turn_aware_astar`、`turn_aware_astar_w2`、`dstar_lite`、`frontier`。后两项按步数选路，在代价叠加层中也可按相同规则评价 |
-| `plan.py` | 扩展实验计划，定义 `PLANS`：`--plan ext_turn`（转弯代价 / 运动时间）、`--plan ext_noise`（噪声）；地图划分见 `mazes/splits/ext_dev.json`；规则见 `Docs/ext/experiment-plan.md`；加 `--dry-run` 只预览设置与输出目录、不运行 | 已建，计划待冻结 |
+| `difficulty.py` | D4：迷宫难度特征（环路、死胡同、分岔、绕路、转向）与基础结果的 Spearman 相关；模拟退火生成对抗迷宫。`python src/ext/difficulty.py features` / `adversarial --algorithm <名称>` | 已完成，结果在 `results/ext/difficulty/` |
+| `plan.py` | 扩展实验计划，定义 `PLANS`：`--plan ext_turn`（转弯代价 / 运动时间）、`--plan ext_noise`（噪声）、`--plan ext_two_phase`（两阶段）；地图划分见 `mazes/splits/ext_dev.json`；规则见 `Docs/ext/experiment-plan.md`；加 `--dry-run` 只预览设置与输出目录、不运行 | 已建，计划待冻结 |
 
 ## 已实现的算法
 
@@ -21,6 +22,7 @@
 | [dstar_lite](algorithms/dstar_lite.py) | 在乐观地图上维护到目标的单位步长距离。发现新墙后，从被阻断边的端点开始修复距离，再沿当前最短路走一步。 | 增量修复与重复 A* 全量重算的计算耗时如何？平局时两者可能选不同路线。 |
 | [frontier](algorithms/frontier.py) | 从当前位置用 BFS 沿确认通路寻找最近的未访问格。同距离的候选中优先选目标格。 | 逐步扩大已探索区域，与直接朝目标乐观规划相比，覆盖率、重复访问和到达步数有何差异？ |
 | [belief_astar](algorithms/belief_astar.py) | 噪声观测下用对数几率融合多次读数判断墙（撞到的墙、走过的边为确定），在乐观地图上按规则代价做朝向 A*；消融 `belief_astar_naive` 只信最近一次读数。唯一声明支持 `noisy_sensor` 的探索算法。 | 累积证据比只信最近读数能少撞几次墙、少走多少步？准确率下降时如何变化？ |
+| [bounded_explore_e0 / e10 / e25](algorithms/bounded_explore.py) | 两阶段比赛（D5）：先像朝向 A* 一样到达目标，再继续探索乐观最优路线上没到过的格子，直到“只走已确认通路的冲刺代价 P ≤ (1 + ε) × 乐观下界 O”时停止。由于 O ≤ 真实最优 ≤ P，停止时冲刺代价可证明不超过 (1 + ε) 倍最优。 | 多探索换更好的冲刺值不值？成绩随 ε 如何变化？与“到达即停”相比如何？ |
 | [rule_optimal](algorithms/rule_optimal.py) | 读取完整地图，按同一规则计算从起点到目标的最小代价。 | 给出 `optimal_rule_cost`，用于计算实际探索代价与已知地图最优代价之比。 |
 
 **算法下拉框分组。** 上位机按“基础算法”和“扩展算法”列出可选项。启用转弯代价或运动时间后，两种朝向 A* 会移到“为当前规则设计”组；启用噪声观测后，只有 `belief_astar`（及其消融）可选，其余探索算法置灰。D* Lite 和最近前沿仍按格数选路，运行器会按所选规则给它们的实际轨迹计价。各策略的整体性能排名有待正式对照实验。

@@ -11,7 +11,7 @@ Computational Thinking for AI 小组项目（Track A：自主机器人导航与�
 | 阶段 | 状态 | 入口 |
 | --- | --- | --- |
 | **基础规则**（16×16、每步代价 1、理想观测） | ✅ 已完成并冻结，标签 `basic-rules-v1` | 代码 [`src/basic/`](src/basic/README.md) · 结果 [`results/basic/`](results/README.md) · 文档 [`Docs/basic/`](Docs/README.md) |
-| **扩展规则**（转弯代价、两阶段、噪声；启发式与近似算法） | 🟡 E0、E1、E2、E3 与撞墙处理已实现；[实验计划](Docs/ext/experiment-plan.md)草稿待确认，确认后运行；D5 未开始 | **[进度看板与路线图](Docs/ext/dev-plan.md#0-进度看板)** · [扩展算法](src/ext/README.md#已实现的算法) |
+| **扩展规则**（转弯代价、两阶段、噪声；启发式与近似算法） | 🟡 E0～E3、D4、D5 与撞墙处理已实现；[实验计划](Docs/ext/experiment-plan.md)草稿待确认，确认后运行 | **[进度看板与路线图](Docs/ext/dev-plan.md#0-进度看板)** · [扩展算法](src/ext/README.md#已实现的算法) |
 | **最终报告** | 🟡 中文初稿，扩展结果、英文定稿、贡献记录待完成 | [`Docs/Result.md`](Docs/Result.md) |
 
 **基础阶段的主要结论**（详见报告第 2、4 章）：
@@ -101,9 +101,9 @@ mazes/                     地图：classic/ 下全部地图（外部迷宫库 e
 | E0 | 0 | 基础设施：`Ruleset`（基础规则 + 叠加层）；`Runner` / 实验框架的 `rule` 参数（默认基础规则）；`--rule`；上位机规则面板 | 无 | 已完成 · [`src/core/rules.py`](src/core/rules.py) · [测试](tests/test_ext/test_rules.py) |
 | E1 | 1 | 运动时间模型与转弯代价规则（参数来源要记录）；规则最优参照 `rule_optimal` | E0 | 已完成 · [`src/ext/rules/`](src/ext/rules/) · [测试](tests/test_ext/test_turn_cost.py) |
 | E3 | 1 | [朝向 A* 与加权变体](src/ext/algorithms/turn_aware_astar.py) · [测试](tests/test_ext/test_turn_aware_astar.py)；[D* Lite](src/ext/algorithms/dstar_lite.py) · [最近前沿探索](src/ext/algorithms/frontier.py) · [测试](tests/test_ext/test_incremental_frontier.py) | E0；转弯加权依赖 E1 | zhouying682 / 四个策略开发完成，E3-1 已验收；对照计划已接入，正式结果待生成 |
-| D5 | 2 | 两阶段规则（探索 + 冲刺）与 ε 提前停止（近似算法） | E0 | 待认领 / 未开始 |
+| D5 | 2 | 两阶段规则与 ε 提前停止：[两阶段规则层](src/ext/rules/two_phase.py) · [有界提前停止](src/ext/algorithms/bounded_explore.py) · [测试](tests/test_ext/test_two_phase.py) | E0 | Luca / 已完成；正式实验（X3）待做 |
 | E2 | 3 | 传感器噪声与置信度融合：[噪声观测层](src/ext/rules/noisy_sensor.py) · [撞墙处理层](src/ext/rules/collision.py) · [置信度重规划](src/ext/algorithms/belief_astar.py) · [测试](tests/test_ext/test_noisy_sensor.py) | E0 | Luca、zhouying682 / 已完成；正式实验待做 |
-| D4 | 可选 | 迷宫难度刻画与对抗式生成最坏迷宫 | 无 | 待认领 / 未开始 |
+| D4 | 可选 | 迷宫难度刻画与对抗式生成最坏迷宫：[`src/ext/difficulty.py`](src/ext/difficulty.py) · [结果](results/ext/difficulty/) · [测试](tests/test_ext/test_difficulty.py) | 无 | Luca / 已完成 |
 | 全员 | 收尾 | 报告第 3 章扩展结果、英文定稿、参考文献核查、贡献记录、在干净提交上重跑全部实验 | 各模块结果 | 全员 / 未开始 |
 
 ## 课程要求对应

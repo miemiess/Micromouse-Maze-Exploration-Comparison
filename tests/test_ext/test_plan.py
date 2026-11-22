@@ -46,6 +46,10 @@ class ExtPlanTests(unittest.TestCase):
         for run in noise:
             self.assertEqual((run.algorithms, run.seeds), (NOISE_ALGORITHMS, NOISE_SEEDS))
         self.assertEqual([r.rule.collision_limit for r in noise], [1, None, None, None])
+        two = plans["ext_two_phase"][0]()
+        self.assertEqual(plans["ext_two_phase"][1], "ext/two_phase")
+        self.assertEqual([r.experiment for r in two], ["steps", "lambda_2"])
+        self.assertTrue(all(r.has_flow and len(r.maze_paths) == len(split()["test"]) for r in two))
 
 
 if __name__ == "__main__":

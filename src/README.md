@@ -84,7 +84,10 @@ src/
   的规则最优路线，已知地图规划器 `rule_optimal` 即用它。
 - 算法可实现 `configure(rule)`，每次策略重置或已知地图规划前调用；类属性 `supported_rules`（层 key 的集合）
   声明支持哪些**改变观测**的层，不改变观测的层（如代价层）对所有算法开放。
-- 层可实现 `env_options()`（创建环境的关键字参数，如 `collision_limit`，按维度顺序合并）和 `wrap_env(env)`
+- 层可实现 `summarize(record)`：运行结束后追加指标（两阶段规则用它计算返回起点、冲刺与成绩）。
+- 两阶段规则（flow 层）下环境 `stop_at_goal=False`：到达目标不结束运行，只记 `goal_reached`；策略返回 None 时记为 success。
+  算法声明类属性 `explores_after_goal = True` 才会在到达目标后继续探索，否则第一次到达目标即结束探索。
+- 层可实现 `env_options()`（创建环境的关键字参数，如 `collision_limit`、`stop_at_goal`，按维度顺序合并）和 `wrap_env(env)`
   （包装环境；需要随机数时读 `env.seed`，即运行种子）。维度：代价 cost、观测 observation、撞墙处理 contact、比赛流程 flow。
 - 所有算法在同一个算法库里，任何规则下都可直接运行（基础算法就是“不懂新规则”的对照组），不按规则拆分。
   为某些层设计的算法用类属性 `designed_for = ("turn_cost",)` 声明：只用于上位机算法下拉框分组（为当前规则设计）和

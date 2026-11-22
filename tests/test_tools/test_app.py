@@ -161,6 +161,24 @@ class AppTests(unittest.TestCase):
         window.select_rule("basic")
         self.assertEqual(window.run_tab.stat_labels["collisions"].text(), "-")
 
+    def test_two_phase_metrics_in_run_and_compare(self):
+        """两阶段规则：规则指标框显示探索、冲刺与成绩；对比表多一列“成绩”；有界提前停止归入“为当前规则设计”。"""
+        window = self.window
+        self.assertTrue(window.select_rule("two_phase"))
+        tab = window.run_tab
+        self.assertTrue(tab.rule_box.isVisibleTo(tab))
+        tab.algorithm.setCurrentIndex(tab.algorithm.findText("bounded_explore_e25"))
+        tab.controller.run_to_end()
+        snap = tab.runner.snapshot()
+        self.assertEqual(snap.status, "success")
+        self.assertNotEqual(tab.rule_labels["total_score"].text(), "-")
+        self.assertLessEqual(snap.stats["sprint_ratio"], 1.25 + 1e-6)
+        headers = [window.compare_tab.table.horizontalHeaderItem(i).text()
+                   for i in range(window.compare_tab.table.columnCount())]
+        self.assertIn("成绩", headers)
+        window.select_rule("basic")
+        self.assertFalse(tab.rule_box.isVisibleTo(tab))
+
     def test_map_library_import_and_save(self):
         """导入的地图进入地图库并出现在下拉框；库外打开的地图修改后保存为库中的副本。"""
         from maze_document import generate

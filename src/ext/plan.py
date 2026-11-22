@@ -8,10 +8,12 @@
       （噪声实验每局较慢，且要多种子重复）。
 实验：
     X1 turn：转弯代价 λ = 0.5、1、2、4 与运动时间模型，各一个子实验，10 个探索算法；
-    X2 noise：噪声观测三档准确率 + 理想观测对照，置信度重规划及其消融，5 个种子。
+    X2 noise：噪声观测三档准确率 + 理想观测对照，置信度重规划及其消融，5 个种子；
+    X3 two_phase：两阶段比赛（步数代价、λ = 2 转弯代价），“到达即停”的对照与 ε = 0 / 0.1 / 0.25 的有界提前停止。
 运行：
     python src/run_experiments.py --plan ext_turn    → results/ext/turn/<子实验>/（约 15 分钟）
     python src/run_experiments.py --plan ext_noise   → results/ext/noise/<子实验>/（约 30 分钟）
+    python src/run_experiments.py --plan ext_two_phase → results/ext/two_phase/<子实验>/
 """
 
 import json
@@ -39,6 +41,10 @@ NOISE_RULES = {"ideal": "basic",
                "mid": "noisy_sensor:p_front=0.9,p_side=0.8,p_back=0.7",
                "low": "noisy_sensor:p_front=0.8,p_side=0.7,p_back=0.6"}
 NOISE_SEEDS = list(range(5))
+# X3：两阶段比赛。前三个算法不声明 explores_after_goal，第一次到达目标即结束探索（“到达即停”对照）
+TWO_PHASE_ALGORITHMS = ["repeated_astar", "flood_fill", "turn_aware_astar",
+                        "bounded_explore_e0", "bounded_explore_e10", "bounded_explore_e25"]
+TWO_PHASE_RULES = {"steps": "two_phase", "lambda_2": "turn_cost:weight=2+two_phase"}
 
 
 def split() -> dict[str, list[str]]:
@@ -80,8 +86,16 @@ def build_noise() -> list[ExperimentRun]:
             for name, spec in NOISE_RULES.items()]
 
 
+def build_two_phase() -> list[ExperimentRun]:
+    """X3：两阶段比赛，测试集，种子 0，不重复计时（只比较代价与成绩）。"""
+    maps = _paths(split()["test"])
+    return [ExperimentRun(maps, TWO_PHASE_ALGORITHMS, seeds=[0], experiment=name, rule=parse_rule(spec))
+            for name, spec in TWO_PHASE_RULES.items()]
+
+
 # 计划注册：core.experiments 通过它找到 --plan，结果写到 results/ext/<目录>/<子实验>/。
-PLANS = {"ext_turn": (build_turn, "ext/turn"), "ext_noise": (build_noise, "ext/noise")}
+PLANS = {"ext_turn": (build_turn, "ext/turn"), "ext_noise": (build_noise, "ext/noise"),
+         "ext_two_phase": (build_two_phase, "ext/two_phase")}
 
 if __name__ == "__main__":
     print(write_split())
