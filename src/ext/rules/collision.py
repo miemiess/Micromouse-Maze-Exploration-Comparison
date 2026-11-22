@@ -40,6 +40,10 @@ class CollisionLayer(RuleLayer):
             raise ValueError("collision limit must be an integer ≥ 2 or unlimited "
                              "(limit = 1 is the basic rule: omit the layer)")
 
+    def params(self) -> dict:
+        """JSON 元数据使用 null 表示不限次数。"""
+        return {"limit": self.env_options()["collision_limit"]}
+
     def label(self) -> str:
         return "撞墙后继续" if self.limit == math.inf else f"撞墙后继续（{int(self.limit)} 次终止）"
 

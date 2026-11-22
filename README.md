@@ -11,12 +11,12 @@ Computational Thinking for AI 小组项目（Track A：自主机器人导航与�
 | 阶段 | 状态 | 入口 |
 | --- | --- | --- |
 | **基础规则**（16×16、每步代价 1、理想观测） | ✅ 已完成并冻结，标签 `basic-rules-v1` | 代码 [`src/basic/`](src/basic/README.md) · 结果 [`results/basic/`](results/README.md) · 文档 [`Docs/basic/`](Docs/README.md) |
-| **扩展规则**（转弯代价、两阶段、噪声；启发式与近似算法） | 🟡 E0、E1、E2、E3 与撞墙处理已实现；**下一步：扩展实验计划**，D5 未开始 | **[进度看板与路线图](Docs/ext/dev-plan.md#0-进度看板)** · [扩展算法](src/ext/README.md#已实现的算法) |
+| **扩展规则**（转弯代价、两阶段、噪声；启发式与近似算法） | 🟡 E0、E1、E2、E3 与撞墙处理已实现；[E1/E3 代价对照与 E2 噪声计划已接入](Docs/ext/experiment-plan.md)，正式结果待生成，D5 未开始 | **[进度看板与路线图](Docs/ext/dev-plan.md#0-进度看板)** · [扩展算法](src/ext/README.md#已实现的算法) |
 | **最终报告** | 🟡 中文初稿，扩展结果、英文定稿、贡献记录待完成 | [`Docs/Result.md`](Docs/Result.md) |
 
 **基础阶段的主要结论**（详见报告第 2、4 章）：
 
-- 基础规则下推荐 **重复 A***：514/514 张地图全部到达，步数 / 最短路均值 2.17；与 Flood-Fill 步数相近，计算量只有其 1/15～1/21。
+- 基础规则下推荐 **重复 A***：514/514 张地图全部到达，步数 / 最短路均值 2.17；与 Flood-Fill 步数相近，报告表 2 四类地图的计算时间中位数约为其 1/15～1/21。
 - 迷宫结构决定算法优劣：沿墙法在有环路的迷宫上大多失败（144/514）；只用一种迷宫生成器得到的结论可能完全不成立。
 - 本组新方案“先验增强重复 A*”只降低了最坏情况，整体不优于重复 A*。原因是开发集只含生成图，出现了分布偏移；按地图来源分层的事后分析证实了这一点。
 
@@ -32,6 +32,7 @@ python -m pip install -r requirements.txt
 python -m unittest discover -s tests            # 全部测试（含基础规则回归测试）
 python tools/MazesTest/maze_app.py              # 上位机：实时运行、同屏对比、已知地图规划、批量实验、地图编辑
 python src/run_experiments.py --plan basic      # 复现基础规则的正式实验（约 8 分钟）→ results/basic/
+python src/run_experiments.py --plan ext        # E1/E3 代价对照实验 → results/ext/
 python tools/MazesTest/maze_app.py --rule turn_cost:weight=2               # 以“基础规则 + 转弯代价”启动上位机
 python src/run_experiments.py --rule motion_time --maps "mazes/classic/external_*.json" --algorithms dfs repeated_astar rule_optimal
 ```
@@ -47,7 +48,7 @@ src/                       代码（接口契约见 src/README.md）
   run_experiments.py         实验命令行入口
   core/                      公共接口层：环境、算法接口与驱动、实验框架（basic 与 ext 共用，修改须向后兼容）
   basic/                     基础规则层（冻结）：algorithms/ 9 个已有算法 + 新方案及其消融变体、plan.py 实验计划、开发集调参脚本
-  ext/                       扩展层：rules/ 规则、algorithms/ 新算法、plan.py 扩展实验计划（待建）
+  ext/                       扩展层：rules/ 规则、algorithms/ 新算法、plan.py 注册代价对照与噪声实验计划
 results/                   实验结果
   basic/                     基础规则正式结果：main/、randomness/、dev/、demo/
   ext/                       扩展阶段正式结果
@@ -99,7 +100,7 @@ mazes/                     地图：classic/ 下全部地图（外部迷宫库 e
 | --- | --- | --- | --- | --- |
 | E0 | 0 | 基础设施：`Ruleset`（基础规则 + 叠加层）；`Runner` / 实验框架的 `rule` 参数（默认基础规则）；`--rule`；上位机规则面板 | 无 | 已完成 · [`src/core/rules.py`](src/core/rules.py) · [测试](tests/test_ext/test_rules.py) |
 | E1 | 1 | 运动时间模型与转弯代价规则（参数来源要记录）；规则最优参照 `rule_optimal` | E0 | 已完成 · [`src/ext/rules/`](src/ext/rules/) · [测试](tests/test_ext/test_turn_cost.py) |
-| E3 | 1 | [朝向 A* 与加权变体](src/ext/algorithms/turn_aware_astar.py) · [测试](tests/test_ext/test_turn_aware_astar.py)；[D* Lite](src/ext/algorithms/dstar_lite.py) · [最近前沿探索](src/ext/algorithms/frontier.py) · [测试](tests/test_ext/test_incremental_frontier.py) | E0；转弯加权依赖 E1 | zhouying682 / 四个策略开发完成，E3-1 已验收；正式对照实验待做 |
+| E3 | 1 | [朝向 A* 与加权变体](src/ext/algorithms/turn_aware_astar.py) · [测试](tests/test_ext/test_turn_aware_astar.py)；[D* Lite](src/ext/algorithms/dstar_lite.py) · [最近前沿探索](src/ext/algorithms/frontier.py) · [测试](tests/test_ext/test_incremental_frontier.py) | E0；转弯加权依赖 E1 | zhouying682 / 四个策略开发完成，E3-1 已验收；对照计划已接入，正式结果待生成 |
 | D5 | 2 | 两阶段规则（探索 + 冲刺）与 ε 提前停止（近似算法） | E0 | 待认领 / 未开始 |
 | E2 | 3 | 传感器噪声与置信度融合：[噪声观测层](src/ext/rules/noisy_sensor.py) · [撞墙处理层](src/ext/rules/collision.py) · [置信度重规划](src/ext/algorithms/belief_astar.py) · [测试](tests/test_ext/test_noisy_sensor.py) | E0 | Luca、zhouying682 / 已完成；正式实验待做 |
 | D4 | 可选 | 迷宫难度刻画与对抗式生成最坏迷宫 | 无 | 待认领 / 未开始 |

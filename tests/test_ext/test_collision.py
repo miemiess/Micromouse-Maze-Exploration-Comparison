@@ -99,6 +99,10 @@ class CollisionTests(unittest.TestCase):
             self.assertEqual(rule.collision_limit, limit)
             self.assertEqual(rule.metadata()["collision_limit"], limit)
         self.assertEqual(parse_rule("collision"), parse_rule("collision:limit=inf"))
+        import json
+        unlimited = parse_rule("collision").metadata()
+        self.assertIsNone(unlimited["layers"][0]["params"]["limit"])
+        json.dumps(unlimited, allow_nan=False)
         self.assertEqual(BASIC.collision_limit, 1)
         for value in ("-1", "0", "1", "1.1", "x", "2+collision:limit=3"):
             with self.assertRaises(ValueError):
@@ -121,3 +125,17 @@ class CollisionTests(unittest.TestCase):
             meta = json.loads((Path(out) / "metadata.json").read_text())["rule"]
             self.assertEqual(meta["spec"], spec)
             self.assertEqual(meta["collision_limit"], 3)
+
+    def test_first_collision_export_keeps_counts_with_legacy_status(self):
+        from unittest.mock import Mock
+        from core.experiments import ExperimentRun, summarize
+
+        fixture = Path(__file__).parent / "fixtures" / "turn_cost_tradeoff.json"
+        run = ExperimentRun([fixture], ["dfs"], include_collision_stats=True)
+        info = Mock(wraps=run.infos["dfs"])
+        info.create.return_value = Script(D.WEST)
+        run.infos["dfs"] = info
+        row = run.run_task(fixture, "dfs", 0)
+        self.assertEqual((row["status"], row["actions"], row["collisions"], row["steps"]),
+                         ("invalid_action", 1, 1, 0))
+        self.assertEqual(summarize([row])[-1]["collision_run_rate"], 1)

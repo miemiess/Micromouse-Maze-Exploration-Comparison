@@ -8,7 +8,7 @@
 | --- | --- | --- |
 | `rules/` | 叠加层（`core.rules.RuleLayer` 子类，模块中列入 `LAYERS` 即被自动发现）：代价模型、观测模型、撞墙处理、比赛流程 | 已有 `turn_cost.py`（转弯代价，E1）、`motion_time.py`（运动时间模型，E1）、`noisy_sensor.py`（噪声观测，E2）、`collision.py`（撞墙处理） |
 | `algorithms/` | 为扩展规则编写的算法，每个算法一个文件；自动发现扫描本目录。共用的搜索与已知墙在 `core/planning.py` | 已有 `rule_optimal.py`（已知地图上的规则最优参照）；E3 探索策略：`turn_aware_astar`、`turn_aware_astar_w2`、`dstar_lite`、`frontier`。后两项按步数选路，在代价叠加层中也可按相同规则评价 |
-| `plan.py` | 扩展实验计划，定义 `PLANS = {名称: (构建函数, "ext/<名称>")}` | 待建 |
+| `plan.py` | [E1/E3 代价对照和 E2 噪声计划](../../Docs/ext/experiment-plan.md)，分别用 `--plan ext` 和 `--plan ext-noise`，加 `--dry-run` 预览 | 已注册，正式结果待生成 |
 
 ## 已实现的算法
 
@@ -37,7 +37,7 @@ python tools/MazesTest/maze_app.py tests/test_ext/fixtures/turn_cost_tradeoff.js
 
 1. **只依赖公共接口**：从 `core.algorithm_api`、`core.environment`、`core.experiments` 导入；需要复用基础算法时从 `basic.algorithms.<模块>` 导入，不复制代码。
 2. **不修改基础层**：不改 `src/basic/` 的行为。公共接口层 `src/core/` 可以扩展，但必须向后兼容（默认参数保持基础规则），并通过 `tests/test_basic/test_regression.py`。
-3. **算法**：新建 `algorithms/<名称>.py`，类设置唯一 `name`（与已有算法重名会被拒绝），按 `src/README.md` 的接口实现；上位机重启后自动出现，带 `[EXT]` 标记。
+3. **算法**：新建 `algorithms/<名称>.py`，类设置唯一 `name`（与已有算法重名会被拒绝），按 `src/README.md` 的接口实现；上位机重启后按当前规则和算法来源分组显示。
 4. **实验先写计划**：在 `Docs/ext/` 写好实验计划（问题、地图、开发 / 测试划分、参数候选与选取标准）后再运行；带参数的方法只在开发集上调参，开发集按地图来源分层。
 5. **结果**：写到 `results/ext/<规则或实验名>/`；`metadata.json` 记录规则与参数。
 6. **测试**：放在 `tests/test_ext/`，文件名以 `test_` 开头。扩展算法会自动进入

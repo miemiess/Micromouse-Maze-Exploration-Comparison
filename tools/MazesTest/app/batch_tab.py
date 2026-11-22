@@ -2,7 +2,7 @@
 
 运行、统计和导出全部调用 src/core/experiments.py（与命令行共用），本页只负责：
     - 选择地图（筛选、全选、按类别选）与算法；
-    - 设置种子、重复次数、移动预算、是否测内存；
+    - 设置种子、重复次数、动作预算、是否测内存；
     - 分批推进运行（界面保持响应，可随时停止），显示进度；
     - 结束后导出 runs.csv / summary.csv / summary.md / metadata.json / figures，并显示汇总表。
 """
@@ -29,6 +29,7 @@ CORE_MAPS = ("external_1stworld", "external_japan2017ef", "external_uk2011f")
 SUMMARY_COLUMNS = [("算法", "algorithm"), ("成功", "success"), ("运行", "runs"),
                    ("步数/最短路（均值）", "mean_ratio"), ("中位数", "median_ratio"),
                    ("平均转向", "mean_turns"), ("平均重复访问", "mean_repeat_visits"),
+                   ("平均动作", "mean_actions"), ("平均碰撞", "mean_collisions"),
                    ("计算 ms（中位数）", "median_compute_ms"), ("扩展节点", "mean_expanded_nodes")]
 # 扩展规则（有代价层）时汇总表追加的列。
 RULE_SUMMARY_COLUMNS = [("规则代价/最优（均值）", "mean_rule_cost_ratio"),
@@ -125,7 +126,7 @@ class BatchTab(QWidget):
         seed_row.addWidget(self.seed_count)
         form.addRow("随机种子", seed_row)
         form.addRow("重复次数", self.repeats)
-        form.addRow("移动预算", self.budget)
+        form.addRow("动作预算", self.budget)
         form.addRow(self.memory)
         form.addRow("输出目录", out_row)
 
@@ -267,7 +268,8 @@ class BatchTab(QWidget):
         self.run = ExperimentRun(maps, algorithms,
                                  seeds=list(range(first, first + self.seed_count.value())),
                                  repeats=self.repeats.value(), max_steps=self.budget.value() or None,
-                                 measure_memory=self.memory.isChecked(), experiment="batch", rule=self.rule)
+                                 measure_memory=self.memory.isChecked(), experiment="batch", rule=self.rule,
+                                 include_collision_stats=True)
         text = self.output.text().strip()
         self.output_dir = Path(text) if text else \
             LOCAL_RESULTS / f"batch-{datetime.now():%Y%m%d-%H%M%S}"

@@ -572,8 +572,11 @@ class Runner:
 
 
 def run_episode(maze: Maze, algorithm, *, seed: int | None = None,
-                max_steps: int | None = None, time_budget: float = 30.0, rule: Ruleset = BASIC) -> dict:
+                max_steps: int | None = None, time_budget: float = 30.0, rule: Ruleset = BASIC,
+                include_collision_stats: bool = False) -> dict:
     """把一个算法完整运行一次，返回统计结果（供批量实验使用）。
+
+    include_collision_stats 为真时，首次撞墙终止模式也返回 actions 和 collisions。
 
     Returns:
         MazeEnvironment.summary() 的全部字段，另含 algorithm、mode、maze_id、seed、error
@@ -581,5 +584,8 @@ def run_episode(maze: Maze, algorithm, *, seed: int | None = None,
     """
     runner = Runner(maze, algorithm, seed=seed, max_steps=max_steps, time_budget=time_budget, rule=rule)
     runner.run()
-    return {**runner.summary(), **runner._extra_stats, "algorithm": runner.name,
+    stats = runner.summary()
+    if include_collision_stats:
+        stats.update(actions=runner.env.actions, collisions=runner.env.collisions)
+    return {**stats, **runner._extra_stats, "algorithm": runner.name,
             "mode": runner.mode, "maze_id": maze.maze_id, "seed": seed, "error": runner.error}
