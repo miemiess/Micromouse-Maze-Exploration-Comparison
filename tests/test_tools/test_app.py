@@ -49,6 +49,93 @@ class AppTests(unittest.TestCase):
         self.window.close()
         self.tmp.cleanup()
 
+    def test_rule_panel_shows_basic_plus_layers(self):
+        """规则面板：基础规则为灰色单标签；叠加转弯代价后出现彩色层标签、公式，各页同步换色与指标。"""
+        from unittest.mock import patch
+        from PySide6.QtWidgets import QLabel, QMessageBox
+        window = self.window
+        panel = window.rule_panel
+        combo = panel.selectors["cost"]
+        self.assertTrue(window.rule.is_basic)
+        self.assertIn("基础规则", window.windowTitle())
+        self.assertFalse(panel.reset_button.isEnabled())
+        self.assertFalse(window.run_tab.rule_box.isVisibleTo(window.run_tab))
+        self.assertIsNone(panel.findChild(QLabel, "chip_turn_cost"))
+
+        # 有未完成的运行时先确认；取消则一切保持原样
+        doc = window.document
+        doc.dirty = True
+        window.tabs.setCurrentWidget(window.compare_tab)
+        window.run_tab.controller.step_once()
+        runner = window.run_tab.runner
+        with patch.object(QMessageBox, "question", return_value=QMessageBox.No):
+            combo.setCurrentIndex(combo.findData("turn_cost"))
+        self.assertTrue(window.rule.is_basic)
+        self.assertIs(window.run_tab.runner, runner)
+        self.assertIsNone(combo.currentData())
+
+        with patch.object(QMessageBox, "question", return_value=QMessageBox.Yes):
+            combo.setCurrentIndex(combo.findData("turn_cost"))
+        rule = window.rule
+        self.assertEqual(rule.key, "turn_cost")
+        self.assertIs(window.tabs.currentWidget(), window.compare_tab)   # 不跳页
+        self.assertIs(window.document, doc)
+        self.assertTrue(doc.dirty)
+        # 规则栈：基础规则 + 彩色的“转弯代价”标签；公式、恢复按钮、标题、状态栏、标签页边框都随之变化
+        chip = panel.findChild(QLabel, "chip_turn_cost")
+        self.assertIsNotNone(chip)
+        self.assertIn("转弯代价", chip.text())
+        self.assertIn(rule.color, chip.styleSheet())
+        self.assertIn("λ", panel.formula.text())
+        self.assertTrue(panel.reset_button.isEnabled())
+        self.assertIn("转弯代价", window.windowTitle())
+        self.assertEqual(window.rule_status.text(), rule.title)
+        self.assertIn(rule.color, window.tabs.styleSheet())
+        self.assertIn(rule.color, panel.styleSheet())
+        for current in [window.run_tab.runner, window.known_tab.runner, *window.compare_tab.runners]:
+            self.assertIs(current.rule, rule)
+            self.assertEqual(current.snapshot().decision, 0)
+        self.assertTrue(window.run_tab.rule_box.isVisibleTo(window.run_tab))
+        self.assertIn("规则代价", [window.compare_tab.table.horizontalHeaderItem(i).text()
+                                for i in range(window.compare_tab.table.columnCount())])
+        self.assertIn("转弯代价", window.batch_tab.rule_label.text())
+        self.assertIsNotNone(window.run_tab.view._optimal)
+
+        # 运行到底：规则代价 = 步数 + λ × 转向，界面显示代价与“代价 / 最优”
+        window.run_tab.controller.run_to_end()
+        snap = window.run_tab.runner.snapshot()
+        self.assertEqual(snap.stats["rule_cost"], snap.stats["steps"] + snap.stats["turns_90"])
+        self.assertEqual(window.run_tab.rule_labels["rule_cost"].text(), f"{snap.stats['rule_cost']:g}")
+        self.assertNotEqual(window.run_tab.rule_labels["rule_cost_ratio"].text(), "-")
+
+        # 调整 λ（无未完成运行时不弹确认）→ 新规则；已知地图页的规则最优路线随之更新
+        with patch.object(QMessageBox, "question", side_effect=AssertionError("不应弹窗")):
+            window.tabs.setCurrentWidget(window.run_tab)
+            window.run_tab.controller.run_to_end()
+            panel.spins[("turn_cost", "weight")].setValue(3.0)
+        self.assertEqual(window.rule.spec, "turn_cost:weight=3")
+        self.assertEqual(window.known_tab.runner.rule, window.rule)
+
+        # 恢复基础规则：标签、指标框、表格列都回到基础规则
+        panel.reset_button.click()
+        self.assertTrue(window.rule.is_basic)
+        self.assertIsNone(combo.currentData())
+        self.assertFalse(window.run_tab.rule_box.isVisibleTo(window.run_tab))
+        self.assertNotIn("规则代价", [window.compare_tab.table.horizontalHeaderItem(i).text()
+                                   for i in range(window.compare_tab.table.columnCount())])
+
+    def test_select_rule_from_spec_and_export_title(self):
+        """命令行写法也能切换规则；导出图片标题带规则写法与规则代价。"""
+        from app.export import snapshot_title
+        window = self.window
+        self.assertTrue(window.select_rule("motion_time"))
+        self.assertEqual(window.rule.key, "motion_time")
+        snap = window.run_tab.runner.run()
+        title = snapshot_title(window.run_tab.maze, window.run_tab.runner.name, snap, window.rule)
+        self.assertIn("rule: motion_time:", title)
+        self.assertIn(f"cost {snap.stats['rule_cost']}", title)
+        self.assertTrue(window.run_tab.rule_labels["rule_cost"].text().endswith(" s"))
+
     def test_map_library_import_and_save(self):
         """导入的地图进入地图库并出现在下拉框；库外打开的地图修改后保存为库中的副本。"""
         from maze_document import generate
@@ -102,7 +189,7 @@ class AppTests(unittest.TestCase):
             return {combo.itemText(i) for i in range(combo.count())}
         compare = {self.window.compare_tab.algorithms.item(i).text()
                    for i in range(self.window.compare_tab.algorithms.count())}
-        self.assertEqual(names(self.window.known_tab.algorithm), {"astar", "bfs"})
+        self.assertEqual(names(self.window.known_tab.algorithm), {"astar", "bfs", "rule_optimal"})
         self.assertFalse({"astar", "bfs"} & (names(self.window.run_tab.algorithm) | compare))
         self.assertIn("wall_follower_left", names(self.window.run_tab.algorithm))
 
@@ -141,6 +228,7 @@ class AppTests(unittest.TestCase):
         self.window.library.save_generated(generate(5, 5, seed=1))
         tab = self.window.batch_tab
         self.window.tabs.setCurrentWidget(tab)  # 切到本页时刷新地图列表
+        self.window.select_rule("turn_cost")
         self.assertEqual(tab.maps.count(), 3)
         tab._check(lambda name: name.startswith("external_"))
         self.assertEqual(len(tab.selected_maps()), 2)
@@ -152,8 +240,16 @@ class AppTests(unittest.TestCase):
         tab.run_to_end()
         out = Path(self.tmp.name) / "batch"
         self.assertTrue((out / "runs.csv").exists() and (out / "metadata.json").exists())
+        import json
+        settings = json.loads((out / "metadata.json").read_text(encoding="utf-8"))
+        self.assertEqual(settings["rule"], self.window.rule.metadata())
         self.assertEqual(tab.table.rowCount(), 2)
         self.assertIn("完成", tab.status.text())
+        self.window.select_rule("basic")
+        self.assertIsNone(tab.run)
+        self.assertEqual(tab.table.rowCount(), 0)
+        self.assertFalse(tab.open_button.isEnabled())
+        self.assertTrue((out / "runs.csv").is_file())
 
     def test_generate_replaces_document(self):
         """随机生成会替换当前地图并出现在地图下拉框中。"""

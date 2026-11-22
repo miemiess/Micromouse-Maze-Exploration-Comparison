@@ -29,3 +29,10 @@ Luca 2026-11-20 清理：删除过时的 results/preliminary（已被正式实�
 Luca 2026-11-20 删除实验 3（与调参记录重复），开发集只保留 results/standard/dev（tuning.md + tune_dev.py）
 Luca 2026-11-20 事后分析：按地图来源分层的开发集（20% 外部迷宫库 + 生成图）重新调参，选出 c = 0，留出集上与重复 A* 相同；写入报告 4.5（标注为事后分析）与 results/standard/dev/posthoc.md
 Luca 2026-11-20 目录大重组：src/core（公共接口）、src/basic（基础规则，冻结）、src/ext（扩展）；results、Docs、tests 同样分层；实验计划拆到 src/basic/plan.py（--plan basic），消融改为算法类属性声明；新增基础规则回归测试；README 重写，新增 Docs/ext/dev-plan.md 扩展路线图
+Codex 2026-11-20 完成 E0：接通 Ruleset、运行器、批量实验、命令行和上位机；增加规则切换确认、导出标记及基础兼容性测试。
+Codex 2026-11-20 上位机规则切换改为工作区切换：扩展侧栏导航、返回实时运行页、重置模拟与批量结果视图，并验证取消切换及保留地图编辑。
+Codex 2026-11-20 上位机改用互斥规则按钮，两个模式共用顶部标签导航与原生配色。
+Codex 2026-11-22 添加 E1 / E3 转弯代价验收迷宫，在基础环境中穷举核对两条路径及 λ = 1 的切换阈值。
+Luca 2026-11-22 重构 E0：规则抽象移入 src/core/rules.py（基础规则 + 叠加层，公共接口层不再导入扩展层），去掉 preview 占位规则；各页实现 set_rule，规则代价改为增量计价
+Luca 2026-11-22 完成 E1：src/ext/rules/turn_cost.py（步数 + λ×转向）、motion_time.py（梯形加减速 + 转向用时）、规则最优参照 src/ext/algorithms/rule_optimal.py；实验框架追加规则代价列与图；新增 test_turn_cost、test_motion_time
+Luca 2026-11-22 上位机规则面板：规则栈标签（基础规则 ＋ 彩色叠加层）、参数输入、整体换色；画布转弯点圆环与规则最优路线；规则指标框；对比表按规则代价评最优

@@ -13,9 +13,9 @@ from PySide6.QtCore import QPointF, QRectF, Qt, Signal
 from PySide6.QtGui import QBrush, QColor, QFont, QPainter, QPen, QPolygonF
 from PySide6.QtWidgets import QSizePolicy, QWidget
 
-from simulation import DELTAS, Direction, Maze, Snapshot, maze_walls, wall_segment
+from simulation import DELTAS, Cell, Direction, Maze, Snapshot, maze_walls, wall_segment  # 先导入：把 src/ 加入路径
 
-Cell = tuple[int, int]
+from core.rules import BASIC, Ruleset, turn_points  # noqa: E402
 
 COLORS = {
     "background": QColor("#ffffff"),
@@ -51,6 +51,8 @@ class ViewOptions:
         cell_text: 显示格子文字，如 Flood-Fill 距离或 DFS 访问顺序。
         cell_color: 显示策略自定义的格子底色，如 DFS 当前分支。
         path: 显示已走过的路径。
+        turns: 扩展规则下标出转弯点（规则颜色的圆环，掉头为双环）。
+        rule_optimal: 扩展规则下叠加已知地图上的规则最优路线（规则颜色虚线）。
     """
     fog: bool = False
     known_walls: bool = False
@@ -58,6 +60,8 @@ class ViewOptions:
     cell_text: bool = True
     cell_color: bool = True
     path: bool = True
+    turns: bool = True
+    rule_optimal: bool = True
 
 
 class MazeView(QWidget):
@@ -81,6 +85,8 @@ class MazeView(QWidget):
         self._board = None
         self._snapshot: Snapshot | None = None
         self._hover = None
+        self._rule = BASIC
+        self._optimal: list[Cell] | None = None   # 当前规则下的最优路线（已知地图参照）
         self.setMinimumSize(240, 240)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.setMouseTracking(editable)
@@ -108,6 +114,12 @@ class MazeView(QWidget):
     def set_snapshot(self, snapshot: Snapshot | None) -> None:
         """设置运行状态；None 表示只显示地图。"""
         self._snapshot = snapshot
+        self.update()
+
+    def set_rule(self, rule: Ruleset, optimal_path: list[Cell] | None = None) -> None:
+        """设置当前规则与规则最优路线；基础规则下不画任何规则图层。"""
+        self._rule = rule
+        self._optimal = [tuple(c) for c in optimal_path] if optimal_path else None
         self.update()
 
     def set_options(self, options: ViewOptions) -> None:
@@ -235,6 +247,9 @@ class MazeView(QWidget):
             pen = QPen(COLORS["plan"], max(1.5, cell * 0.07), Qt.DashLine, Qt.RoundCap)
             self._polyline(painter, plan, pen)
 
+        if self._rule.cost_layer is not None:
+            self._draw_rule_layers(painter, snap, cell)
+
         self._draw_walls(painter, walls, snap, cell)
         if snap and opt.known_walls:
             pen = QPen(COLORS["known_wall"], max(1.0, cell * 0.05), Qt.DotLine)
@@ -255,6 +270,28 @@ class MazeView(QWidget):
             self._draw_mouse(painter, start, self._board[3], cell, alpha=110)
         self._draw_hover(painter, cell)
         self._draw_labels(painter, width, height, cell)
+
+    def _draw_rule_layers(self, painter: QPainter, snap: Snapshot | None, cell: float) -> None:
+        """扩展规则的图层：迷宫外框、规则最优路线（虚线）与转弯点（圆环）。"""
+        width, height = self._board[0], self._board[1]
+        color = QColor(self._rule.color)
+        painter.setPen(QPen(color, max(3.0, cell * 0.12)))
+        painter.setBrush(Qt.NoBrush)
+        pad = 0.22  # 外框画在外墙之外（单位：格），避免被黑色外墙盖住
+        painter.drawRect(QRectF(self._point(-pad, height + pad), self._point(width + pad, -pad)))
+        if self.options.rule_optimal and self._optimal and len(self._optimal) > 1:
+            faded = QColor(color)
+            faded.setAlpha(150)
+            self._polyline(painter, self._optimal,
+                           QPen(faded, max(1.5, cell * 0.06), Qt.DashDotLine, Qt.RoundCap, Qt.RoundJoin))
+        if self.options.turns and snap and len(snap.path) > 1:
+            pen = QPen(color, max(1.5, cell * 0.07))
+            painter.setPen(pen)
+            for point, quarters in turn_points(snap.path, self._board[3]):
+                center = self._center(point)
+                for ring in range(quarters):  # 转 90° 一个圆环，掉头两个
+                    r = cell * (0.2 + 0.1 * ring)
+                    painter.drawEllipse(center, r, r)
 
     def _fill_cells(self, painter: QPainter, cells, color: QColor) -> None:
         """用同一颜色填充多个格子。"""

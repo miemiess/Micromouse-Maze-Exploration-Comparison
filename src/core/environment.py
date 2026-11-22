@@ -106,6 +106,14 @@ class Maze:
         if not isinstance(self.metadata, dict):
             raise ValueError("metadata must be an object")
 
+    @property
+    def walls(self) -> frozenset:
+        """全部内部墙（真值，只读）：每面墙是两个相邻格组成的 frozenset。
+
+        只有环境、已知地图规划器、规则代价计算和可视化可以使用；未知地图探索策略不得读取。
+        """
+        return self._walls
+
     @classmethod
     def from_json(cls, path):
         """从 JSON 文件读取地图，并通过构造函数验证内容。

@@ -37,6 +37,7 @@ matplotlib.use("Agg")  # 只写文件、不弹窗口；与上位机（Qt）同�
 import matplotlib.pyplot as plt  # noqa: E402
 
 from core.algorithm_api import EXPLORE, KNOWN_MAP, Maze, discover_algorithms, run_episode  # noqa: E402
+from core.rules import BASIC, Ruleset, parse_rule  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]  # src/core/experiments.py → 项目根目录
 MAZE_DIR = ROOT / "mazes" / "classic"
@@ -53,6 +54,10 @@ RUN_FIELDS = ["run_id", "experiment", "maze_id", "map_group", "algorithm", "expe
 SUMMARY_FIELDS = ["map_group", "algorithm", "experiment_mode", "runs", "success", "success_rate",
                   "mean_steps", "mean_ratio", "median_ratio", "max_ratio", "mean_turns",
                   "mean_repeat_visits", "mean_coverage", "median_compute_ms", "mean_expanded_nodes"]
+# 扩展规则（有代价层）时追加的列；基础规则不写这些列，输出格式与 basic-rules-v1 相同。
+RULE_RUN_FIELDS = ["rule", "rule_cost", "optimal_rule_cost", "rule_cost_ratio"]
+RULE_SUMMARY_FIELDS = ["mean_rule_cost", "mean_rule_cost_ratio", "median_rule_cost_ratio",
+                       "max_rule_cost_ratio"]
 
 
 # ====================================================================== 地图与分组
@@ -88,7 +93,7 @@ class ExperimentRun:
 
     def __init__(self, maze_paths: list[Path], algorithms: list[str], *, seeds=(0,),
                  repeats: int = 1, max_steps: int | None = None, measure_memory: bool = False,
-                 experiment: str = "custom"):
+                 experiment: str = "custom", rule: Ruleset = BASIC):
         """记录实验设置。
 
         Args:
@@ -99,6 +104,7 @@ class ExperimentRun:
             max_steps: 移动预算；None 时为 20 × 格子数。
             measure_memory: 是否用 tracemalloc 另外运行一轮测峰值内存（会变慢，与计时分开）。
             experiment: 写入结果的实验名称。
+            rule: 比赛规则（core.rules），默认基础规则；有代价层时额外记录规则代价与最优规则代价。
         """
         self.infos, errors = discover_algorithms()
         if errors:
@@ -106,6 +112,10 @@ class ExperimentRun:
         unknown = [a for a in algorithms if a not in self.infos]
         if unknown:
             raise ValueError(f"unknown algorithms: {unknown}")
+        self.rule = rule
+        for name in algorithms:
+            if not rule.supports(self.infos[name]):
+                raise ValueError(f"{name} does not support rule {rule.key}")
         self.maze_paths = list(maze_paths)
         self.algorithms = list(algorithms)
         self.seeds = list(seeds)
@@ -115,26 +125,36 @@ class ExperimentRun:
         self.experiment = experiment
         self.rows: list[dict] = []
         self.started = datetime.now()
-        self._mazes: dict[Path, tuple[Maze, int | None]] = {}
+        self._mazes: dict[Path, tuple[Maze, int | None, float | None]] = {}
 
     def tasks(self) -> list[tuple[Path, str, int]]:
         """全部（地图, 算法, 种子）组合。"""
         return [(m, a, s) for m in self.maze_paths for a in self.algorithms for s in self.seeds]
 
-    def _maze(self, path: Path) -> tuple[Maze, int | None]:
-        """读取地图并计算已知地图最短路长度（不可达时为 None），结果缓存。"""
+    @property
+    def has_rule_cost(self) -> bool:
+        """本次实验的规则是否有代价层（有则输出规则代价相关的列）。"""
+        return self.rule.cost_layer is not None
+
+    def run_fields(self) -> list[str]:
+        """runs.csv 的列：基础列，扩展规则下另加规则代价列。"""
+        return RUN_FIELDS + (RULE_RUN_FIELDS if self.has_rule_cost else [])
+
+    def _maze(self, path: Path) -> tuple[Maze, int | None, float | None]:
+        """读取地图，计算已知地图最短路长度与本规则下的最优代价（不可达时为 None），结果缓存。"""
         if path not in self._mazes:
             maze = Maze.from_json(path)
             best = run_episode(maze, self.infos["bfs"].create()) if "bfs" in self.infos else None
             shortest = best["steps"] if best and best["status"] == "success" else None
-            self._mazes[path] = (maze, shortest)
+            optimal = self.rule.optimal_cost(maze) if self.has_rule_cost else None
+            self._mazes[path] = (maze, shortest, optimal)
         return self._mazes[path]
 
     def run_task(self, maze_path: Path, algorithm: str, seed: int) -> dict:
         """运行一个组合并返回结果行（同时追加到 self.rows）。"""
-        maze, shortest = self._maze(maze_path)
+        maze, shortest, optimal = self._maze(maze_path)
         info = self.infos[algorithm]
-        results = [run_episode(maze, info.create(), seed=seed, max_steps=self.max_steps)
+        results = [run_episode(maze, info.create(), seed=seed, max_steps=self.max_steps, rule=self.rule)
                    for _ in range(self.repeats)]
         first = results[0]
         times = [r["compute_seconds"] * 1000 for r in results]
@@ -157,6 +177,11 @@ class ExperimentRun:
             "peak_memory_bytes": self._peak_memory(maze, info, seed) if self.measure_memory else "",
             "error": (first.get("error") or "").strip().splitlines()[-1] if first.get("error") else "",
         }
+        if self.has_rule_cost:
+            cost = first.get("rule_cost")
+            row.update({"rule": self.rule.key, "rule_cost": cost,
+                        "optimal_rule_cost": optimal if optimal is not None else "",
+                        "rule_cost_ratio": round(cost / optimal, 4) if success and optimal else ""})
         self.rows.append(row)
         return row
 
@@ -164,7 +189,7 @@ class ExperimentRun:
         """单独运行一轮，用 tracemalloc 测量 Python 对象的峰值内存（不代表进程总内存）。"""
         tracemalloc.start()
         try:
-            run_episode(maze, info.create(), seed=seed, max_steps=self.max_steps)
+            run_episode(maze, info.create(), seed=seed, max_steps=self.max_steps, rule=self.rule)
             return tracemalloc.get_traced_memory()[1]
         finally:
             tracemalloc.stop()
@@ -181,6 +206,7 @@ class ExperimentRun:
     def metadata(self) -> dict:
         """运行环境与设置，写入 metadata.json。"""
         return {
+            "rule": self.rule.metadata(),
             "experiment": self.experiment, "started": self.started.isoformat(timespec="seconds"),
             "finished": datetime.now().isoformat(timespec="seconds"),
             "git_commit": _git_commit(), "python": sys.version.split()[0],
@@ -232,6 +258,14 @@ def summarize(rows: list[dict]) -> list[dict]:
             "median_compute_ms": round(statistics.median(r["compute_ms"] for r in runs), 3),
             "mean_expanded_nodes": mean([r["expanded_nodes"] for r in runs]),
         })
+        if any("rule_cost" in r for r in runs):
+            cost_ratios = [r["rule_cost_ratio"] for r in ok if r["rule_cost_ratio"] != ""]
+            summary[-1].update({
+                "mean_rule_cost": mean([r["rule_cost"] for r in ok]),
+                "mean_rule_cost_ratio": mean(cost_ratios),
+                "median_rule_cost_ratio": round(statistics.median(cost_ratios), 3) if cost_ratios else "",
+                "max_rule_cost_ratio": max(cost_ratios) if cost_ratios else "",
+            })
     return summary
 
 
@@ -240,15 +274,16 @@ def write_outputs(run: ExperimentRun, out_dir: Path, *, plot: bool = True) -> Pa
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     with (out_dir / "runs.csv").open("w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=RUN_FIELDS)
+        writer = csv.DictWriter(f, fieldnames=run.run_fields())
         writer.writeheader()
         writer.writerows(run.rows)
     summary = summarize(run.rows)
     with (out_dir / "summary.csv").open("w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=SUMMARY_FIELDS)
+        writer = csv.DictWriter(f, fieldnames=SUMMARY_FIELDS + (RULE_SUMMARY_FIELDS if run.has_rule_cost else []))
         writer.writeheader()
         writer.writerows(summary)
-    (out_dir / "summary.md").write_text(summary_markdown(summary), encoding="utf-8")
+    heading = "" if run.rule.is_basic else f"# 规则：{run.rule.title}\n\n"
+    (out_dir / "summary.md").write_text(heading + summary_markdown(summary), encoding="utf-8")
     (out_dir / "metadata.json").write_text(json.dumps(run.metadata(), ensure_ascii=False, indent=2),
                                            encoding="utf-8")
     if plot:
@@ -272,6 +307,14 @@ def summary_markdown(summary: list[dict]) -> str:
                          f"{s['mean_turns']} | {s['mean_repeat_visits']} | {s['median_compute_ms']} | "
                          f"{s['mean_expanded_nodes']} |")
         lines.append("")
+        if any("mean_rule_cost" in s for s in rows):
+            lines += ["规则代价（成功运行；比值的分母为已知地图上的规则最优代价）：", "",
+                      "| 地图组 | 算法 | 平均规则代价 | 代价/最优（均值） | 中位数 | 最大 |",
+                      "| --- | --- | --- | --- | --- | --- |"]
+            lines += [f"| {s['map_group']} | {s['algorithm']} | {s['mean_rule_cost']} | "
+                      f"{s['mean_rule_cost_ratio']} | {s['median_rule_cost_ratio']} | {s['max_rule_cost_ratio']} |"
+                      for s in rows]
+            lines.append("")
     return "\n".join(lines)
 
 
@@ -287,7 +330,7 @@ ALGORITHM_COLORS = {
 }
 INK, MUTED, GRID, SURFACE = "#0b0b0b", "#898781", "#e6e5e1", "#fcfcfb"
 # 已知地图算法只是参照，与探索算法同图出现时用中性灰，避免与探索算法撞色。
-REFERENCE_COLORS = {"bfs": "#898781", "astar": "#52514e"}
+REFERENCE_COLORS = {"bfs": "#898781", "astar": "#52514e", "rule_optimal": "#343a40"}
 
 
 def read_summary(result_dir: Path) -> list[dict]:
@@ -346,6 +389,9 @@ def plot_all(result_dir: Path) -> list[Path]:
     图中文字使用英文，避免默认字体缺少中文字形；数值表见同目录 summary.md。
     """
     result_dir = Path(result_dir)
+    metadata = result_dir / "metadata.json"
+    settings = json.loads(metadata.read_text(encoding="utf-8")) if metadata.exists() else {}
+    rule_key = settings.get("rule", {}).get("key", BASIC.key)  # 图中只用英文 key，避免缺字
     rows = read_summary(result_dir)
     out = result_dir / "figures"
     out.mkdir(exist_ok=True)
@@ -361,6 +407,8 @@ def plot_all(result_dir: Path) -> list[Path]:
 
     def save(fig, name):
         fig.patch.set_facecolor(SURFACE)
+        if rule_key != BASIC.key:
+            fig.suptitle(f"Rule: basic + {rule_key}", color=INK, fontsize=10, x=0.01, ha="left")
         fig.tight_layout()
         path = out / name
         fig.savefig(path, dpi=150)
@@ -385,6 +433,14 @@ def plot_all(result_dir: Path) -> list[Path]:
         ax.set_ylim(0, 1.15)
         _style(ax, "Success rate within budget", "success rate")
         save(fig, "success_by_group.png")
+
+        if any(r.get("mean_rule_cost_ratio") is not None for r in explore):
+            fig, ax = plt.subplots(figsize=(max(7, 1.3 * len(groups) + 3), 4.5))
+            _grouped_bars(ax, groups, explorers,
+                          lambda g, a: (lookup.get((g, a)) or {}).get("mean_rule_cost_ratio"))
+            ax.axhline(1, color=MUTED, linewidth=1, linestyle="--")
+            _style(ax, "Rule cost / known-map rule optimum (successful runs, mean; 1 = optimal)", "ratio")
+            save(fig, "rule_cost_ratio_by_group.png")
 
     everyone = [r for r in rows if r["map_group"] == "ALL" and r["algorithm"] not in variants]
     if everyone:
@@ -449,6 +505,9 @@ def main(argv: list[str] | None = None) -> None:
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     plans = available_plans()
     parser.add_argument("--plan", choices=sorted(plans), help="按某一层的实验计划运行全部正式实验")
+    parser.add_argument("--rule", default=None, metavar="SPEC",
+                        help="自选实验的规则，默认 basic；如 turn_cost、turn_cost:weight=2、motion_time"
+                             "（写法见 core.rules.parse_rule）。正式计划自带规则，不能另指定")
     parser.add_argument("--maps", nargs="+", default=["mazes/classic/*.json"], help="地图路径或通配符")
     parser.add_argument("--algorithms", nargs="+", default=["all"], help="算法名，all 表示全部")
     parser.add_argument("--seeds", nargs="+", type=int, default=[0])
@@ -471,12 +530,20 @@ def main(argv: list[str] | None = None) -> None:
     if args.plan:
         build, folder = plans[args.plan]
         runs = build()
+        if args.rule:
+            parser.error("--plan 的正式实验自带规则，不能再用 --rule 指定")
         base = args.out or RESULTS / folder
     else:
-        algorithms = list(discover_algorithms()[0]) if args.algorithms == ["all"] else args.algorithms
+        try:
+            rule = parse_rule(args.rule or "basic")
+        except ValueError as exc:
+            parser.error(str(exc))
+        infos = discover_algorithms()[0]
+        algorithms = ([name for name, info in infos.items() if rule.supports(info)]
+                      if args.algorithms == ["all"] else args.algorithms)
         runs = [ExperimentRun(expand_maps(args.maps), algorithms, seeds=args.seeds,
                               repeats=args.repeats, max_steps=args.max_steps,
-                              measure_memory=args.memory)]
+                              measure_memory=args.memory, rule=rule)]
         base = args.out or LOCAL_RESULTS / stamp
     for run in runs:
         total = len(run.tasks())

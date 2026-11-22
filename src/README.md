@@ -14,14 +14,15 @@ src/
     environment.py          地图读取与验证、真值墙壁、观测、移动、访问与转向统计
     algorithm_api.py        共用工具、两类算法接口、自动发现、驱动 Runner / run_episode
     experiments.py          批量实验框架：运行、汇总、导出 CSV / 图表、实验计划注册（--plan）
+    rules.py                规则接口：基础规则 + 叠加层、代价计算、规则最优路线、层的自动发现与解析（--rule）
   basic/                  基础规则层：16×16、每步代价 1、理想观测。冻结于标签 basic-rules-v1，只修 bug
     algorithms/             9 个已有算法 + 本组新方案 prior_astar（含 3 个消融变体）
     plan.py                 基础规则的实验计划（实验 1、2），注册为 --plan basic
     dev_tuning.py           C2 开发集调参 → results/basic/dev/tuning.md
     posthoc_stratified.py   事后分析：分层开发集 → results/basic/dev/posthoc.md
   ext/                    扩展层（开发中）：新规则与为新规则写的算法，见 ext/README.md
-    rules/                  规则层：代价模型、观测模型、比赛流程
-    algorithms/             扩展算法（自动发现扫描本目录）
+    rules/                  叠加层：turn_cost.py（转弯代价）、motion_time.py（运动时间模型）
+    algorithms/             扩展算法（自动发现扫描本目录）：rule_optimal.py（规则最优参照）
     plan.py                 （待建）扩展实验计划，注册为 --plan <名称>
 ```
 
@@ -71,9 +72,19 @@ src/
 （runs.csv / summary / metadata / 图表）和 `plot_all`。实验计划写在各层的 `plan.py` 里，
 定义 `PLANS = {名称: (构建函数, 结果目录名)}`，命令行 `--plan <名称>` 自动找到。
 
-**扩展接入点（规划中，Docs/ext/dev-plan.md 阶段 0）**：规则对象 `Ruleset` 将以可选参数
-`Runner(..., rule=BASIC)` 接入，默认值保持基础规则不变；需要规则参数的算法可选实现 `configure(rule)`。
-在它实现之前，扩展算法按基础规则接口编写即可。
+**规则（`core/rules.py`）**：`Runner`、`run_episode` 和 `ExperimentRun` 接受关键字参数 `rule`，默认 `BASIC`
+（不传时行为与 `basic-rules-v1` 完全相同）。规则 = 基础规则 + 叠加层（`Ruleset(layers)`，每个维度最多一层）；
+具体的层写在 `src/ext/rules/`，模块中的 `LAYERS` 列表被 `available_layers()` 自动发现，公共接口层不导入扩展层。
+
+- 新增一层：在 `src/ext/rules/` 写一个 `RuleLayer`（或代价层 `CostLayer`，实现 `run_cost(格数)`、`turn_cost(90°次数)`）
+  的 dataclass 子类，用类属性声明 `key`、`title`、`dimension`、`color`、`summary`，用字段声明参数，加入 `LAYERS`。
+  上位机规则面板、命令行 `--rule` 与实验框架自动可用。
+- 有代价层时，运行结果多一个 `rule_cost`（Runner 用 `CostMeter` 增量计价）；`Ruleset.optimal_plan(maze)` 给出已知地图上
+  的规则最优路线，已知地图规划器 `rule_optimal` 即用它。
+- 算法可实现 `configure(rule)`，每次策略重置或已知地图规划前调用；类属性 `supported_rules`（层 key 的集合）
+  声明支持哪些**改变观测**的层，不改变观测的层（如代价层）对所有算法开放。
+- 命令行写法 `Ruleset.spec`：`basic`、`turn_cost:weight=2`、`motion_time:v_max=1`；`metadata.json` 的 `rule` 记录
+  `key`、`spec`、`title` 与各层参数。正式计划使用计划内指定的规则，不能再用 `--rule` 指定。
 
 实验执行器通过统一策略接口注册算法，不写死算法数量。随机策略必须接收并记录种子。
 

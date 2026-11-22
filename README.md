@@ -11,7 +11,7 @@ Computational Thinking for AI 小组项目（Track A：自主机器人导航与�
 | 阶段 | 状态 | 入口 |
 | --- | --- | --- |
 | **基础规则**（16×16、每步代价 1、理想观测） | ✅ 已完成并冻结，标签 `basic-rules-v1` | 代码 [`src/basic/`](src/basic/README.md) · 结果 [`results/basic/`](results/README.md) · 文档 [`Docs/basic/`](Docs/README.md) |
-| **扩展规则**（转弯代价、两阶段、噪声；启发式与近似算法） | 🟡 规划完成，待开发（从阶段 0 开始） | 路线图 [`Docs/ext/dev-plan.md`](Docs/ext/dev-plan.md) · 代码 [`src/ext/`](src/ext/README.md) |
+| **扩展规则**（转弯代价、两阶段、噪声；启发式与近似算法） | 🟡 E0 规则基础设施、E1 转弯代价与运动时间模型已完成；下一项为 E3（懂规则的探索算法） | 路线图 [`Docs/ext/dev-plan.md`](Docs/ext/dev-plan.md) · 代码 [`src/ext/`](src/ext/README.md) |
 | **最终报告** | 🟡 中文初稿，扩展结果、英文定稿、贡献记录待完成 | [`Docs/Result.md`](Docs/Result.md) |
 
 **基础阶段的主要结论**（详见报告第 2、4 章）：
@@ -32,6 +32,8 @@ python -m pip install -r requirements.txt
 python -m unittest discover -s tests            # 全部测试（含基础规则回归测试）
 python tools/MazesTest/maze_app.py              # 上位机：实时运行、同屏对比、已知地图规划、批量实验、地图编辑
 python src/run_experiments.py --plan basic      # 复现基础规则的正式实验（约 8 分钟）→ results/basic/
+python tools/MazesTest/maze_app.py --rule turn_cost:weight=2               # 以“基础规则 + 转弯代价”启动上位机
+python src/run_experiments.py --rule motion_time --maps "mazes/classic/external_*.json" --algorithms dfs repeated_astar rule_optimal
 ```
 
 更多命令与答辩演示步骤见 [`Docs/basic/demo-guide.md`](Docs/basic/demo-guide.md)。
@@ -95,8 +97,8 @@ mazes/                     地图：classic/ 下全部地图（外部迷宫库 e
 
 | 编号 | 阶段 | 内容 | 依赖 | 负责人 / 状态 |
 | --- | --- | --- | --- | --- |
-| E0 | 0 | 基础设施：`Ruleset` 规则对象；`Runner` / 实验框架的 `rule` 参数（默认基础规则）；上位机规则切换栏与横幅 | 无，**优先** | 待认领 / 未开始 |
-| E1 | 1 | 运动时间模型与转弯代价规则（参数来源要记录） | E0 | 待认领 / 未开始 |
+| E0 | 0 | 基础设施：`Ruleset`（基础规则 + 叠加层）；`Runner` / 实验框架的 `rule` 参数（默认基础规则）；`--rule`；上位机规则面板 | 无 | 已完成 · [`src/core/rules.py`](src/core/rules.py) · [测试](tests/test_ext/test_rules.py) |
+| E1 | 1 | 运动时间模型与转弯代价规则（参数来源要记录）；规则最优参照 `rule_optimal` | E0 | 已完成 · [`src/ext/rules/`](src/ext/rules/) · [测试](tests/test_ext/test_turn_cost.py) |
 | E3 | 1 | 启发式搜索：（格子, 朝向）A*、加权 A*；可选 D* Lite、前沿探索 | E0；转弯加权依赖 E1 | 待认领 / 未开始 |
 | D5 | 2 | 两阶段规则（探索 + 冲刺）与 ε 提前停止（近似算法） | E0 | 待认领 / 未开始 |
 | E2 | 3 | 传感器噪声与置信度融合（**先开 Issue 讨论撞墙规则**） | E0；需组内同意 | 待认领 / 未开始 |

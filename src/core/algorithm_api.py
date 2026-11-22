@@ -29,6 +29,7 @@ from time import perf_counter
 from typing import Protocol
 
 from core.environment import Cell, Direction, Maze, MazeEnvironment, Observation
+from core.rules import BASIC, Ruleset
 
 __all__ = [
     "Cell", "Edge", "Direction", "Maze", "MazeEnvironment", "Observation",
@@ -37,7 +38,7 @@ __all__ = [
     "maze_walls", "has_wall", "open_neighbours",
     "ExplorationStrategy", "KnownMapPlanner",
     "AlgorithmInfo", "discover_algorithms", "load_algorithm",
-    "Snapshot", "Runner", "run_episode",
+    "Snapshot", "Runner", "run_episode", "Ruleset", "BASIC",
 ]
 
 SRC = Path(__file__).resolve().parents[1]  # src/
@@ -94,10 +95,8 @@ def maze_walls(maze: Maze) -> frozenset[Edge]:
     """返回迷宫的全部内部墙（真值）。
 
     只有已知地图规划器、驱动统计和可视化可以使用；未知地图探索策略不得调用。
-    environment.Maze 目前没有公开墙壁的属性，这里是项目中唯一读取其私有字段的位置；
-    若以后 Maze 增加公开属性，只需修改本函数。
     """
-    return maze._walls
+    return maze.walls
 
 
 def has_wall(maze: Maze, a: Cell, b: Cell) -> bool:
@@ -175,6 +174,7 @@ class AlgorithmInfo:
     layer: str = "basic"
     ablation_of: str = ""
     ablation_baseline: str = ""
+    supported_rules: frozenset[str] | None = None
 
     def create(self):
         """新建一个算法对象（每次运行使用独立对象）。"""
@@ -241,7 +241,8 @@ def discover_algorithms(*, mode: str | None = None, layer: str | None = None
                 doc = (inspect.getdoc(obj) or "").splitlines()
                 found[obj.name] = AlgorithmInfo(
                     obj.name, module_name, obj.__name__, obj_mode, doc[0] if doc else "",
-                    pkg_layer, getattr(obj, "ablation_of", ""), getattr(obj, "ablation_baseline", ""))
+                    pkg_layer, getattr(obj, "ablation_of", ""), getattr(obj, "ablation_baseline", ""),
+                    frozenset(obj.supported_rules) if getattr(obj, "supported_rules", None) is not None else None)
     return dict(sorted(found.items())), errors
 
 
@@ -362,8 +363,11 @@ class Runner:
     """
 
     def __init__(self, maze: Maze, algorithm, *, seed: int | None = None,
-                 max_steps: int | None = None, time_budget: float = 30.0):
+                 max_steps: int | None = None, time_budget: float = 30.0, rule: Ruleset = BASIC):
         """创建环境并完成第一次 reset。
+
+        rule 为比赛规则（core.rules）；默认基础规则，此时行为与 basic-rules-v1 完全相同。
+        算法若实现 configure(rule)，会在每次 reset 前收到当前规则。
 
         Args:
             maze: 真值迷宫。探索算法拿不到它；已知地图规划器通过 plan(maze) 拿到。
@@ -378,8 +382,11 @@ class Runner:
         self.strategy = _PlannedRoute(algorithm, maze) if self.mode == KNOWN_MAP else algorithm
         self.seed = seed
         self.time_budget = time_budget
-        self.env = MazeEnvironment(maze, max_steps=max_steps)
+        self.rule = rule
         self.name = getattr(algorithm, "name", type(algorithm).__name__)
+        if not rule.supports(algorithm):
+            raise ValueError(f"{self.name} does not support rule {rule.key}")
+        self.env = rule.make_env(maze, max_steps)
         self.reset()
 
     # -- 状态 -------------------------------------------------------------
@@ -401,6 +408,7 @@ class Runner:
         self._debug = None
         self._plan: list[Cell] | None = None
         self._extra_stats: dict = {}
+        self._meter = self.rule.new_meter(self.maze.start_heading)  # 规则代价的增量计价器
         observation = self.env.reset()
         self._observation = observation
         if self.mode == KNOWN_MAP:
@@ -410,6 +418,9 @@ class Runner:
             self._observed = set()
             new_walls = self._record_walls(observation)
         try:
+            configure = getattr(self.algorithm, "configure", None)
+            if configure is not None:
+                configure(self.rule)
             started = perf_counter()
             self.strategy.reset(
                 width=self.maze.width, height=self.maze.height, start=self.maze.start,
@@ -431,7 +442,10 @@ class Runner:
 
     def summary(self) -> dict:
         """返回环境统计结果，compute_seconds 为本运行器测得的算法耗时。"""
-        return self.env.summary(compute_seconds=self.compute_seconds)
+        summary = self.env.summary(compute_seconds=self.compute_seconds)
+        if self._meter is not None:  # 基础规则没有计价器，结果字段与 basic-rules-v1 完全相同
+            summary["rule_cost"] = self._meter.total
+        return summary
 
     # -- 推进 -------------------------------------------------------------
     def step(self) -> Snapshot:
@@ -456,6 +470,8 @@ class Runner:
                 result = self.env.step(direction)
                 moved = result.moved
                 self._observation = result.observation
+                if moved and self._meter is not None:
+                    self._meter.add(direction)
                 if not moved:
                     blocked = (self.env.position, direction)
                 elif self.mode == EXPLORE:
@@ -521,14 +537,14 @@ class Runner:
 
 
 def run_episode(maze: Maze, algorithm, *, seed: int | None = None,
-                max_steps: int | None = None, time_budget: float = 30.0) -> dict:
+                max_steps: int | None = None, time_budget: float = 30.0, rule: Ruleset = BASIC) -> dict:
     """把一个算法完整运行一次，返回统计结果（供批量实验使用）。
 
     Returns:
         MazeEnvironment.summary() 的全部字段，另含 algorithm、mode、maze_id、seed、error
         以及已知地图规划器的额外指标。
     """
-    runner = Runner(maze, algorithm, seed=seed, max_steps=max_steps, time_budget=time_budget)
+    runner = Runner(maze, algorithm, seed=seed, max_steps=max_steps, time_budget=time_budget, rule=rule)
     runner.run()
     return {**runner.summary(), **runner._extra_stats, "algorithm": runner.name,
             "mode": runner.mode, "maze_id": maze.maze_id, "seed": seed, "error": runner.error}

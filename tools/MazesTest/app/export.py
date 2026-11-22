@@ -10,22 +10,26 @@ from pathlib import Path
 from PySide6.QtCore import QPoint, QRectF, Qt
 from PySide6.QtGui import QColor, QFont, QImage, QPainter
 
-from simulation import Maze, Runner, Snapshot
+from simulation import Maze, Runner, Snapshot  # 先导入：把 src/ 加入路径
 
+from core.rules import BASIC, Ruleset  # noqa: E402
 from .maze_view import MazeView, ViewOptions
 
 TITLE_HEIGHT = 34
 MAX_GIF_FRAMES = 150   # 自动抽帧时 GIF 最多的帧数，避免文件过大
 
 
-def snapshot_title(maze: Maze, name: str, snapshot: Snapshot) -> str:
-    """生成图片标题：地图、算法、步数和状态。"""
-    return f"{maze.maze_id} | {name} | step {snapshot.stats['steps']} | {snapshot.status}"
+def snapshot_title(maze: Maze, name: str, snapshot: Snapshot, rule: Ruleset = BASIC) -> str:
+    """生成图片标题：地图、算法、步数、状态；扩展规则下另加规则写法与规则代价。"""
+    title = f"{maze.maze_id} | {name} | step {snapshot.stats['steps']} | {snapshot.status}"
+    if rule.is_basic:
+        return title
+    return f"{title} | rule: {rule.spec} | cost {snapshot.stats.get('rule_cost', '-')}"
 
 
 def render_image(maze: Maze, snapshot: Snapshot | None = None, *,
                  options: ViewOptions | None = None, size: int = 900,
-                 title: str | None = None) -> QImage:
+                 title: str | None = None, rule: Ruleset = BASIC) -> QImage:
     """把地图（可选叠加运行状态）渲染为白底图片。
 
     Args:
@@ -34,6 +38,7 @@ def render_image(maze: Maze, snapshot: Snapshot | None = None, *,
         options: 显示选项，默认与界面默认值相同。
         size: 图片宽度（像素）。
         title: 顶部标题；None 时不留标题栏。
+        rule: 当前规则；扩展规则下与界面一样叠加外框、转弯点和规则最优路线。
 
     Returns:
         渲染好的 QImage。
@@ -43,6 +48,9 @@ def render_image(maze: Maze, snapshot: Snapshot | None = None, *,
     view.set_maze(maze)
     view.set_snapshot(snapshot)
     view.set_options(options or ViewOptions())
+    if rule.cost_layer:
+        optimal = rule.optimal_plan(maze)
+        view.set_rule(rule, optimal[1] if optimal else None)
     body = round((size - 36) * maze.height / maze.width) + 28  # 与 MazeView 的边距对应
     view.resize(size, body)
 
@@ -90,7 +98,7 @@ def save_png(image: QImage, path: str | Path) -> Path:
 
 
 def export_gif(maze: Maze, make_strategy, path: str | Path, *, seed: int | None = None,
-               max_steps: int | None = None, options: ViewOptions | None = None,
+               max_steps: int | None = None, rule: Ruleset = BASIC, options: ViewOptions | None = None,
                size: int = 520, fps: int = 10, every: int | None = None) -> Path:
     """从起点完整运行一次算法，并把过程保存为 GIF 动画。
 
@@ -118,16 +126,16 @@ def export_gif(maze: Maze, make_strategy, path: str | Path, *, seed: int | None 
     except ImportError as exc:
         raise RuntimeError("导出 GIF 需要 Pillow：pip install -r requirements.txt") from exc
 
-    total = Runner(maze, make_strategy(), seed=seed, max_steps=max_steps).run().decision
+    total = Runner(maze, make_strategy(), seed=seed, max_steps=max_steps, rule=rule).run().decision
     every = every or max(1, math.ceil(total / MAX_GIF_FRAMES))
-    runner = Runner(maze, make_strategy(), seed=seed, max_steps=max_steps)
+    runner = Runner(maze, make_strategy(), seed=seed, max_steps=max_steps, rule=rule)
 
     frames = []
 
     def capture(snapshot: Snapshot) -> None:
         """渲染一帧并转换为 GIF 使用的调色板图像。"""
-        image = render_image(maze, snapshot, options=options, size=size,
-                             title=snapshot_title(maze, runner.name, snapshot))
+        image = render_image(maze, snapshot, options=options, size=size, rule=rule,
+                             title=snapshot_title(maze, runner.name, snapshot, rule))
         image = image.convertToFormat(QImage.Format_RGBA8888)
         frame = Image.frombuffer("RGBA", (image.width(), image.height()),
                                  bytes(image.constBits()), "raw", "RGBA",

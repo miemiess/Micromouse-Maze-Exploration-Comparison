@@ -18,9 +18,11 @@ from PySide6.QtWidgets import (
     QListWidgetItem, QMessageBox, QPlainTextEdit, QPushButton, QRadioButton, QScrollArea,
     QSlider, QSpinBox, QSplitter, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget)
 
+from simulation import ROOT, AlgorithmInfo, Direction, Maze, Runner  # 先导入：把 src/ 加入路径
 from maze_document import GENERATORS, MazeDocument, generate
-from simulation import ROOT, AlgorithmInfo, Direction, Maze, Runner
 
+from core.rules import BASIC, Ruleset  # noqa: E402
+from .rule_bar import tinted, update_algorithms
 from .export import export_gif, render_image, save_png, snapshot_title, tile_images
 from .maze_view import MazeView, ViewOptions
 
@@ -45,6 +47,34 @@ STAT_ROWS = [("状态", "status"), ("决策次数", "decisions"), ("移动步数
 
 # 已知地图规划器额外显示的统计项（来自规划器的 stats()）。
 KNOWN_MAP_STAT_ROWS = [("扩展节点", "expanded_nodes")]
+
+# 扩展规则（有代价层）时显示的规则指标：(显示名, 键)。rule_cost 来自 Runner；其余由页面计算。
+RULE_STAT_ROWS = [("规则代价", "rule_cost"), ("规则最优代价", "optimal_rule_cost"),
+                  ("代价 / 最优", "rule_cost_ratio")]
+
+
+def format_cost(rule: Ruleset, value) -> str:
+    """按规则代价的单位格式化（如 "4.53 s"）；缺失时为 "-"。"""
+    if value is None:
+        return "-"
+    unit = rule.cost_layer.unit if rule.cost_layer else ""
+    return f"{value:g}{(' ' + unit) if unit else ''}"
+
+
+def rule_metrics(rule: Ruleset, snap, optimal) -> dict:
+    """快照的规则指标：规则代价、最优代价，以及成功到达时的代价 / 最优。"""
+    cost = snap.stats.get("rule_cost") if snap else None
+    ratio = cost / optimal if cost is not None and optimal and snap.status == "success" else None
+    return {"rule_cost": format_cost(rule, cost), "optimal_rule_cost": format_cost(rule, optimal),
+            "rule_cost_ratio": f"{ratio:.3f}" if ratio is not None else "-"}
+
+
+def rule_box_style(rule: Ruleset) -> str:
+    """规则指标框的样式：规则颜色的边框与浅色底。"""
+    return (f"QGroupBox {{ border:2px solid {rule.color}; border-radius:4px; margin-top:12px;"
+            f" background:{tinted(rule.color, 22)}; }}"
+            f"QGroupBox::title {{ color:{rule.color}; font-weight:bold; subcontrol-origin:margin;"
+            " left:8px; padding:0 4px; }")
 
 
 def format_stat(key: str, value) -> str:
@@ -236,7 +266,9 @@ class DisplayBox(QGroupBox):
               ("cell_text", "格子文字（距离 / 访问顺序）"),
               ("cell_color", "策略着色（如 DFS 当前分支）"),
               ("path", "已走路径"),
-              ("known_walls", "策略认知墙（橙色点线）")]
+              ("known_walls", "策略认知墙（橙色点线）"),
+              ("turns", "转弯点（扩展规则：规则色圆环，掉头为双环）"),
+              ("rule_optimal", "规则最优路线（扩展规则：规则色点划线）")]
 
     def __init__(self, parent=None):
         """按 ViewOptions 的默认值创建复选框。"""
@@ -319,6 +351,7 @@ class RunTab(QWidget):
             known_map: 是否为已知地图规划页（标题、说明和统计项不同）。
         """
         super().__init__(parent)
+        self.rule = BASIC
         self.strategies = strategies
         self.known_map = known_map
         self.maze: Maze | None = None
@@ -335,6 +368,7 @@ class RunTab(QWidget):
         algo_box = QGroupBox("已知地图算法" if known_map else "探索算法（未知地图）")
         self.algorithm = QComboBox()
         self.algorithm.addItems(strategies)
+        update_algorithms(self.algorithm, strategies, self.rule)
         self.algorithm.currentTextChanged.connect(self.rebuild)
         self.description = QLabel(wordWrap=True)
         self.description.setStyleSheet("color:#555")
@@ -359,6 +393,18 @@ class RunTab(QWidget):
             self.stat_labels[key] = QLabel("-")
             stats_form.addRow(title, self.stat_labels[key])
 
+        # 规则指标：只在扩展规则（有代价层）时显示，边框为规则颜色。
+        self.rule_box = QGroupBox()
+        rule_form = QFormLayout(self.rule_box)
+        self.rule_formula = QLabel(wordWrap=True)
+        rule_form.addRow(self.rule_formula)
+        self.rule_labels = {}
+        for title, key in RULE_STAT_ROWS:
+            self.rule_labels[key] = QLabel("-")
+            rule_form.addRow(title, self.rule_labels[key])
+        self.rule_box.hide()
+        self._optimal: tuple[float, list] | None = None
+
         log_box = QGroupBox("事件")
         self.log = QPlainTextEdit(readOnly=True)
         self.log.setMaximumBlockCount(1000)
@@ -380,8 +426,20 @@ class RunTab(QWidget):
         left.addWidget(self.view, 1)
         layout = QHBoxLayout(self)
         layout.addLayout(left, 1)
-        layout.addWidget(side_panel(algo_box, self.controls, self.display, stats_box,
-                                    export_box, log_box))
+        layout.addWidget(side_panel(algo_box, self.controls, self.display, self.rule_box,
+                                    stats_box, export_box, log_box))
+
+    def set_rule(self, rule: Ruleset) -> None:
+        """切换规则：更新可用算法与规则指标框，并从起点重新运行。"""
+        self.rule = rule
+        update_algorithms(self.algorithm, self.strategies, rule)
+        cost = rule.cost_layer
+        self.rule_box.setVisible(cost is not None)
+        if cost is not None:
+            self.rule_box.setTitle(f"规则指标 · {rule.title}")
+            self.rule_box.setStyleSheet(rule_box_style(rule))
+            self.rule_formula.setText(f"<b style='color:{rule.color}'>{cost.formula}</b>")
+        self.rebuild()
 
     def set_maze(self, maze: Maze | None, message: str = "") -> None:
         """切换地图并重新开始；maze 为 None 时显示 message 并禁用运行。"""
@@ -403,16 +461,18 @@ class RunTab(QWidget):
             self.view.set_snapshot(None)
             return
         self.view.set_maze(self.maze)
+        self._optimal = self.rule.optimal_plan(self.maze) if self.rule.cost_layer else None
+        self.view.set_rule(self.rule, self._optimal[1] if self._optimal else None)
         try:
             self.runner = Runner(self.maze, info.create(), seed=self.controls.seed_value(),
-                                 max_steps=self.controls.budget_value())
+                                 rule=self.rule, max_steps=self.controls.budget_value())
         except Exception as exc:  # 策略构造函数出错
             self.runner = None
             self.controller.set_runners([])
             self.log.appendPlainText(f"无法创建策略 {name}: {exc}")
             return
         self.log.appendPlainText(
-            f"地图 {self.maze.maze_id}，算法 {name}，预算 {self.runner.env.max_steps} 步")
+            f"地图 {self.maze.maze_id}，算法 {name}，预算 {self.runner.env.max_steps} 步，规则：{self.rule.title}")
         self.controller.set_runners([self.runner])
 
     def export_png(self) -> None:
@@ -426,7 +486,7 @@ class RunTab(QWidget):
         if path:
             run_with_wait_cursor(self, lambda: save_png(render_image(
                 self.maze, snap, options=self.display.options(),
-                title=snapshot_title(self.maze, self.runner.name, snap)), path), "已导出")
+                title=snapshot_title(self.maze, self.runner.name, snap, self.rule), rule=self.rule), path), "已导出")
 
     def export_gif(self) -> None:
         """按当前设置从头运行一次，把完整过程导出为 GIF。"""
@@ -438,7 +498,7 @@ class RunTab(QWidget):
         if path:
             run_with_wait_cursor(self, lambda: export_gif(
                 self.maze, info.create, path, seed=self.controls.seed_value(),
-                max_steps=self.controls.budget_value(), options=self.display.options()),
+                rule=self.rule, max_steps=self.controls.budget_value(), options=self.display.options()),
                 "已导出")
 
     def _on_advanced(self, batches) -> None:
@@ -453,6 +513,10 @@ class RunTab(QWidget):
         self.view.set_snapshot(last)
         for key, label in self.stat_labels.items():
             label.setText(format_stat(key, last.stats.get(key)))
+        if self.rule.cost_layer:
+            values = rule_metrics(self.rule, last, self._optimal[0] if self._optimal else None)
+            for key, label in self.rule_labels.items():
+                label.setText(values[key])
 
     def _log_events(self, snap) -> None:
         """把"被墙挡住后重新规划"、"试图穿墙"、"运行结束"等事件写入日志。"""
@@ -469,7 +533,8 @@ class RunTab(QWidget):
             self.log.appendPlainText(
                 f"结束：{STATUS_TEXT.get(snap.status, snap.status)}；{stats['steps']} 步，"
                 f"{stats['turns_90']} 次转向，{stats['repeat_visits']} 次重复访问，"
-                f"覆盖 {stats['coverage']:.0%}")
+                f"覆盖 {stats['coverage']:.0%}"
+                + (f"；规则代价 {format_cost(self.rule, stats.get('rule_cost'))}" if self.rule.cost_layer else ""))
             if self.runner and self.runner.error:
                 self.log.appendPlainText(self.runner.error)
             if self.runner and getattr(self.runner.algorithm, "loop_detected", False):
@@ -489,6 +554,7 @@ class CompareTab(QWidget):
     def __init__(self, strategies: dict[str, AlgorithmInfo], parent=None):
         """创建算法勾选列表、运行控制、显示选项、画布网格和统计表。"""
         super().__init__(parent)
+        self.rule = BASIC
         self.strategies = strategies
         self.maze: Maze | None = None
         self.runners: list[Runner] = []
@@ -504,6 +570,7 @@ class CompareTab(QWidget):
             item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
             item.setCheckState(Qt.Checked if i < self.MAX_ALGORITHMS else Qt.Unchecked)
             self.algorithms.addItem(item)
+        update_algorithms(self.algorithms, strategies, self.rule)
         self.algorithms.setMaximumHeight(130)
         self.algorithms.itemChanged.connect(self._on_algorithm_toggled)
         QVBoxLayout(algo_box).addWidget(self.algorithms)
@@ -517,8 +584,9 @@ class CompareTab(QWidget):
         self.grid = QGridLayout(self.grid_host)
         self.message = QLabel(alignment=Qt.AlignCenter)
         self.message.setStyleSheet("color:#c0392b")
-        self.table = QTableWidget(0, len(self.COLUMNS))
-        self.table.setHorizontalHeaderLabels([c[0] for c in self.COLUMNS])
+        self.columns = list(self.COLUMNS)
+        self.table = QTableWidget(0, len(self.columns))
+        self.table.setHorizontalHeaderLabels([c[0] for c in self.columns])
         self.table.verticalHeader().hide()
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.horizontalHeader().setStretchLastSection(True)
@@ -554,15 +622,26 @@ class CompareTab(QWidget):
 
         def build():
             images = [render_image(self.maze, r.snapshot(), options=self.display.options(),
-                                   size=700, title=snapshot_title(self.maze, r.name, r.snapshot()))
+                                   size=700, title=snapshot_title(self.maze, r.name, r.snapshot(), self.rule),
+                                   rule=self.rule)
                       for r in self.runners]
             return save_png(tile_images(images, 1 if len(images) == 1 else 2), path)
         run_with_wait_cursor(self, build, "已导出")
 
+    def set_rule(self, rule: Ruleset) -> None:
+        """切换规则：更新可用算法与表格列（扩展规则下加“规则代价”，并按它评最优），重新运行。"""
+        self.rule = rule
+        update_algorithms(self.algorithms, self.strategies, rule)
+        self.columns = self.COLUMNS + ([("规则代价", "rule_cost")] if rule.cost_layer else [])
+        self.table.setColumnCount(len(self.columns))
+        self.table.setHorizontalHeaderLabels([c[0] for c in self.columns])
+        self.rebuild()
+
     def selected(self) -> list[str]:
         """被勾选的算法名。"""
         return [self.algorithms.item(i).text() for i in range(self.algorithms.count())
-                if self.algorithms.item(i).checkState() == Qt.Checked]
+                if self.algorithms.item(i).flags() & Qt.ItemIsEnabled
+                and self.algorithms.item(i).checkState() == Qt.Checked]
 
     def _on_algorithm_toggled(self, item: QListWidgetItem) -> None:
         """勾选变化时重建；超过上限时撤销本次勾选。"""
@@ -591,17 +670,19 @@ class CompareTab(QWidget):
             try:
                 self.runners.append(Runner(self.maze, self.strategies[name].create(),
                                            seed=self.controls.seed_value(),
-                                           max_steps=self.controls.budget_value()))
+                                           rule=self.rule, max_steps=self.controls.budget_value()))
             except Exception as exc:
                 self.message.setText(f"无法创建策略 {name}: {exc}")
                 self.message.show()
         columns = 1 if len(self.runners) <= 1 else 2
+        optimal = self.rule.optimal_plan(self.maze) if self.rule.cost_layer and self.maze else None
         for i, runner in enumerate(self.runners):
             label = QLabel(alignment=Qt.AlignCenter)
             label.setStyleSheet("font-weight:bold")
             view = MazeView()
             view.set_options(self.display.options())
             view.set_maze(self.maze)
+            view.set_rule(self.rule, optimal[1] if optimal else None)
             row, col = divmod(i, columns)
             self.grid.addWidget(label, row * 2, col)
             self.grid.addWidget(view, row * 2 + 1, col)
@@ -616,19 +697,28 @@ class CompareTab(QWidget):
             view.set_options(options)
 
     def _on_advanced(self, batches) -> None:
-        """刷新每个画布、标题和统计表；成功运行中步数最少的一行加粗标绿。"""
+        """刷新每个画布、标题和统计表；成功运行中最优的一行加粗标绿。
+
+        基础规则按步数评最优；扩展规则（有代价层）按规则代价评最优，表格多一列“规则代价”。
+        """
         snaps = [batch[-1] if batch else runner.snapshot()
                  for batch, runner in zip(batches, self.runners)]
+        score_key = "rule_cost" if self.rule.cost_layer else "steps"
         for (label, view), runner, snap in zip(self.views, self.runners, snaps):
             view.set_snapshot(snap)
+            extra = (f" · 代价 {format_cost(self.rule, snap.stats.get('rule_cost'))}"
+                     if self.rule.cost_layer else "")
             label.setText(f"{runner.name} · {STATUS_TEXT.get(snap.status, snap.status)}"
-                          f" · {snap.stats['steps']} 步")
-        finished = [s.stats["steps"] for s in snaps if s.status == "success"]
+                          f" · {snap.stats['steps']} 步{extra}")
+        finished = [s.stats[score_key] for s in snaps if s.status == "success"]
         best = min(finished) if finished else None
         for row, (runner, snap) in enumerate(zip(self.runners, snaps)):
-            is_best = best is not None and snap.status == "success" and snap.stats["steps"] == best
-            for col, (_, key) in enumerate(self.COLUMNS):
-                text = runner.name if key is None else format_stat(key, snap.stats.get(key))
+            is_best = best is not None and snap.status == "success" and snap.stats[score_key] == best
+            for col, (_, key) in enumerate(self.columns):
+                if key == "rule_cost":
+                    text = format_cost(self.rule, snap.stats.get(key))
+                else:
+                    text = runner.name if key is None else format_stat(key, snap.stats.get(key))
                 item = QTableWidgetItem(text)
                 if is_best:
                     font = QFont()

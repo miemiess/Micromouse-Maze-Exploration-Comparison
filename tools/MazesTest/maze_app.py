@@ -20,7 +20,9 @@ from pathlib import Path
 
 from PySide6.QtWidgets import QApplication
 
-from simulation import ROOT, Maze, Runner, discover_algorithms
+from simulation import ROOT, Maze, Runner, discover_algorithms  # 先导入：把 src/ 加入路径
+
+from core.rules import parse_rule  # noqa: E402
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -29,6 +31,8 @@ def build_parser() -> argparse.ArgumentParser:
         description="电脑鼠迷宫探索桌面应用",
         formatter_class=argparse.RawDescriptionHelpFormatter, epilog=__doc__)
     parser.add_argument("maze", nargs="?", help="启动时打开的迷宫 JSON")
+    parser.add_argument("--rule", default="basic", metavar="SPEC",
+                        help="规则，默认 basic；如 turn_cost、turn_cost:weight=2、motion_time")
     parser.add_argument("--export", nargs="+", metavar="MAZE",
                         help="批量导出这些迷宫的图片后退出（可用通配符）")
     parser.add_argument("-o", "--output", default=str(ROOT / "results" / "local" / "figures"),
@@ -98,6 +102,10 @@ def batch_export(args) -> int:
             sys.exit(f"unknown strategy {args.strategy!r}; available: {', '.join(strategies)}")
         info = strategies[args.strategy]
 
+    try:
+        rule = parse_rule(args.rule)
+    except ValueError as exc:
+        sys.exit(str(exc))
     out = Path(args.output)
     for path in expand_paths(args.export):
         maze = Maze.from_json(path)
@@ -105,13 +113,13 @@ def batch_export(args) -> int:
             print(save_png(render_image(maze, size=args.size, title=maze.maze_id),
                            out / f"{maze.maze_id}.png"))
             continue
-        snap = Runner(maze, info.create(), seed=args.seed).run()
+        snap = Runner(maze, info.create(), seed=args.seed, rule=rule).run()
         print(save_png(render_image(maze, snap, size=args.size,
-                                    title=snapshot_title(maze, info.name, snap)),
+                                    title=snapshot_title(maze, info.name, snap, rule), rule=rule),
                        out / f"{maze.maze_id}_{info.name}.png"))
         if args.gif:
             print(export_gif(maze, info.create, out / f"{maze.maze_id}_{info.name}.gif",
-                             seed=args.seed))
+                             seed=args.seed, rule=rule))
     return 0
 
 
@@ -127,6 +135,7 @@ def main(argv: list[str] | None = None) -> int:
     from app.main_window import MainWindow
     app.setApplicationName("Micromouse Maze Explorer")
     window = MainWindow(Path(args.maze) if args.maze else None)
+    window.select_rule(args.rule)
     window.resize(1320, 860)
     window.show()
     return app.exec()

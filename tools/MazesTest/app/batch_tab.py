@@ -18,15 +18,21 @@ from PySide6.QtWidgets import (
     QLineEdit, QListWidget, QListWidgetItem, QMessageBox, QProgressBar, QPushButton, QSpinBox,
     QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget)
 
+from simulation import KNOWN_MAP, ROOT, AlgorithmInfo  # 先导入：把 src/ 加入路径
 from maze_document import MapLibrary
-from core.experiments import LOCAL_RESULTS, ExperimentRun, write_outputs
-from simulation import KNOWN_MAP, ROOT, AlgorithmInfo
+
+from core.experiments import LOCAL_RESULTS, ExperimentRun, write_outputs  # noqa: E402
+from core.rules import BASIC, Ruleset  # noqa: E402
+from .rule_bar import chip_style, update_algorithms
 
 CORE_MAPS = ("external_1stworld", "external_japan2017ef", "external_uk2011f")
 SUMMARY_COLUMNS = [("算法", "algorithm"), ("成功", "success"), ("运行", "runs"),
                    ("步数/最短路（均值）", "mean_ratio"), ("中位数", "median_ratio"),
                    ("平均转向", "mean_turns"), ("平均重复访问", "mean_repeat_visits"),
                    ("计算 ms（中位数）", "median_compute_ms"), ("扩展节点", "mean_expanded_nodes")]
+# 扩展规则（有代价层）时汇总表追加的列。
+RULE_SUMMARY_COLUMNS = [("规则代价/最优（均值）", "mean_rule_cost_ratio"),
+                        ("中位数", "median_rule_cost_ratio")]
 TIME_SLICE = 0.05  # 每次定时器回调最多运行的秒数，保证界面响应
 
 
@@ -51,6 +57,8 @@ class BatchTab(QWidget):
             parent: 父控件。
         """
         super().__init__(parent)
+        self.rule = BASIC
+        self.algorithm_infos = algorithms
         self.library = library
         self.run: ExperimentRun | None = None
         self.tasks: list = []
@@ -89,6 +97,7 @@ class BatchTab(QWidget):
         for name, info in algorithms.items():
             tag = "已知地图（参照）" if info.mode == KNOWN_MAP else "探索"
             self.algorithms.addItem(_checkable(f"{name}　[{tag}]", name, checked=True))
+        update_algorithms(self.algorithms, algorithms, self.rule)
         self.algorithms.setMaximumHeight(200)
         QVBoxLayout(algo_box).addWidget(self.algorithms)
 
@@ -147,7 +156,10 @@ class BatchTab(QWidget):
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.horizontalHeader().setStretchLastSection(True)
 
+        # 本页实验使用的规则（随顶部规则面板切换），结果的 metadata 记录同一规则。
+        self.rule_label = QLabel()
         right = QVBoxLayout()
+        right.addWidget(self.rule_label)
         right.addWidget(algo_box)
         right.addWidget(settings_box)
         right.addWidget(run_box)
@@ -158,6 +170,32 @@ class BatchTab(QWidget):
         layout.addLayout(right, 3)
         self.output_dir: Path | None = None
         self.reload_maps()
+        self._show_rule()
+
+    def set_rule(self, rule: Ruleset) -> None:
+        """切换规则：清空上一轮结果（已导出的文件保留），保留地图与算法选择，更新可用算法与表格列。"""
+        self.rule = rule
+        update_algorithms(self.algorithms, self.algorithm_infos, rule)
+        self._show_rule()
+        self.run = None
+        self.tasks = []
+        self.position = 0
+        self.output_dir = None
+        self.output.clear()
+        self.table.setRowCount(0)
+        self.progress.setRange(0, 100)
+        self.progress.reset()
+        self.open_button.setEnabled(False)
+        self.status.setText("选择地图和算法后点击运行。")
+
+    def _show_rule(self) -> None:
+        """顶部规则标签与汇总表的列。"""
+        rule = self.rule
+        self.rule_label.setText(f"本页实验规则：{rule.title}" + ("" if rule.is_basic else "（结果单独保存，不与基础规则混排）"))
+        self.rule_label.setStyleSheet(chip_style(rule.color, filled=not rule.is_basic))
+        self.columns = SUMMARY_COLUMNS + (RULE_SUMMARY_COLUMNS if rule.cost_layer else [])
+        self.table.setColumnCount(len(self.columns))
+        self.table.setHorizontalHeaderLabels([c[0] for c in self.columns])
 
     # -- 地图选择 ---------------------------------------------------------
     def reload_maps(self) -> None:
@@ -179,7 +217,8 @@ class BatchTab(QWidget):
     def selected_algorithms(self) -> list[str]:
         """被勾选的算法名。"""
         return [self.algorithms.item(i).data(Qt.UserRole) for i in range(self.algorithms.count())
-                if self.algorithms.item(i).checkState() == Qt.Checked]
+                if self.algorithms.item(i).flags() & Qt.ItemIsEnabled
+                and self.algorithms.item(i).checkState() == Qt.Checked]
 
     def _check(self, rule) -> None:
         """按规则 rule(地图名) 设置每张地图的勾选状态。"""
@@ -228,7 +267,7 @@ class BatchTab(QWidget):
         self.run = ExperimentRun(maps, algorithms,
                                  seeds=list(range(first, first + self.seed_count.value())),
                                  repeats=self.repeats.value(), max_steps=self.budget.value() or None,
-                                 measure_memory=self.memory.isChecked(), experiment="batch")
+                                 measure_memory=self.memory.isChecked(), experiment="batch", rule=self.rule)
         text = self.output.text().strip()
         self.output_dir = Path(text) if text else \
             LOCAL_RESULTS / f"batch-{datetime.now():%Y%m%d-%H%M%S}"
@@ -283,7 +322,7 @@ class BatchTab(QWidget):
         self.open_button.setEnabled(True)
         done = len(self.run.rows)
         self.status.setText(("已停止，" if stopped else "完成，") +
-                            f"{done} 次运行的结果已导出到：{out}")
+                            f"{self.run.rule.title}，{done} 次运行的结果已导出到：{out}")
 
     def _show_summary(self, out: Path) -> None:
         """读取 summary.csv 中“全部地图”一组，显示在表格中。"""
@@ -292,7 +331,7 @@ class BatchTab(QWidget):
             rows = [r for r in csv.DictReader(f) if r["map_group"] == "ALL"]
         self.table.setRowCount(len(rows))
         for i, row in enumerate(rows):
-            for j, (_, key) in enumerate(SUMMARY_COLUMNS):
+            for j, (_, key) in enumerate(self.columns):
                 self.table.setItem(i, j, QTableWidgetItem(row.get(key, "")))
         self.table.resizeColumnsToContents()
 

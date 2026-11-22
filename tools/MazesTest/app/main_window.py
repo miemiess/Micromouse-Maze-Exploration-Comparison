@@ -9,13 +9,16 @@
 from pathlib import Path
 
 from PySide6.QtGui import QAction, QKeySequence
-from PySide6.QtWidgets import (QComboBox, QFileDialog, QLabel, QMainWindow, QMessageBox,
-                               QTabWidget, QToolBar)
+from PySide6.QtWidgets import (QComboBox, QFileDialog, QLabel, QMainWindow,
+                               QMessageBox, QTabWidget, QToolBar, QVBoxLayout, QWidget)
 
+from simulation import EXPLORE, KNOWN_MAP, ROOT, discover_algorithms  # 先导入：把 src/ 加入路径
 from maze_document import MapLibrary, MazeDocument, generate
-from simulation import EXPLORE, KNOWN_MAP, ROOT, discover_algorithms
+
+from core.rules import BASIC, Ruleset, parse_rule  # noqa: E402
 
 from .batch_tab import BatchTab
+from .rule_bar import RulePanel, chip_style
 from .tabs import CompareTab, EditorTab, RunTab
 
 MAZE_DIR = ROOT / "mazes" / "classic"  # 项目的地图目录：全部地图统一放在这里
@@ -53,6 +56,7 @@ class MainWindow(QMainWindow):
             map_dir: 地图库文件夹，默认项目的 mazes/classic/（测试时可换成临时目录）。
         """
         super().__init__()
+        self.rule = BASIC
         self.library = MapLibrary(map_dir)
         self.algorithms, errors = discover_algorithms()
         explorers = {n: i for n, i in self.algorithms.items() if i.mode == EXPLORE}
@@ -79,7 +83,17 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.batch_tab, "▦ 批量实验")
         self.tabs.addTab(self.editor_tab, "✎ 地图编辑")
         self.tabs.currentChanged.connect(self._on_tab_changed)
-        self.setCentralWidget(self.tabs)
+
+        # 规则面板横跨顶部，始终可见；标签页边框随规则换色。
+        self.rule_panel = RulePanel()
+        self.rule_panel.ruleRequested.connect(self.select_rule)
+        central = QWidget()
+        column = QVBoxLayout(central)
+        column.setContentsMargins(0, 0, 0, 0)
+        column.setSpacing(0)
+        column.addWidget(self.rule_panel)
+        column.addWidget(self.tabs, 1)
+        self.setCentralWidget(central)
 
         self._build_toolbar_and_menu()
         if errors:
@@ -109,6 +123,9 @@ class MainWindow(QMainWindow):
         self.map_combo.setMinimumWidth(300)
         self.map_combo.activated.connect(self._on_map_chosen)
         toolbar.addWidget(self.map_combo)
+        self.rule_status = QLabel()
+        self.statusBar().addPermanentWidget(self.rule_status)
+        self._apply_rule_style()
 
         import_action = QAction("导入地图…", self, shortcut=QKeySequence.Open)
         import_action.setToolTip("验证外部迷宫文件，合法后复制进地图库 mazes/classic/")
@@ -129,6 +146,56 @@ class MainWindow(QMainWindow):
         file_menu.addSeparator()
         file_menu.addAction(quit_action)
         self.menuBar().addMenu("帮助").addAction(help_action)
+
+    # -- 规则 -------------------------------------------------------------
+    def select_rule(self, rule: Ruleset | str) -> bool:
+        """切换到规则 rule（Ruleset 或命令行写法，如 "turn_cost:weight=2"），返回是否切换。
+
+        有正在进行或未完成的运行时先确认；确认后所有页从起点重新运行，批量实验导出已完成部分。
+        地图与未保存的修改不受影响，当前所在的页也不变。
+        """
+        if isinstance(rule, str):
+            rule = parse_rule(rule)
+        if rule == self.rule:
+            self.rule_panel.set_rule(rule)
+            return True
+        run_tabs = (self.run_tab, self.compare_tab, self.known_tab)
+        timers = [tab.controller.timer for tab in run_tabs] + [self.batch_tab.timer]
+        active = [timer for timer in timers if timer.isActive()]
+        partial = any(r.snapshot().decision and not r.finished
+                      for tab in run_tabs for r in tab.controller.runners)
+        if active or partial:
+            for timer in active:
+                timer.stop()
+            answer = QMessageBox.question(
+                self, "切换规则",
+                f"切换到「{rule.title}」后，各页将从起点重新运行；批量实验会先导出已完成的记录。继续吗？")
+            for timer in active:
+                timer.start()
+            if answer != QMessageBox.Yes:
+                self.rule_panel.set_rule(self.rule)
+                return False
+            self.batch_tab.stop()
+        self.rule = rule
+        self.rule_panel.set_rule(rule)
+        for tab in (*run_tabs, self.batch_tab):
+            tab.set_rule(rule)
+        self._apply_rule_style()
+        self._update_title()
+        self._sync_maze(force=True)
+        self.statusBar().showMessage(f"已切换到「{rule.title}」，各页已从起点重新开始。", 5000)
+        return True
+
+    def _apply_rule_style(self) -> None:
+        """标签页边框、选中标签和状态栏标签使用当前规则的颜色。"""
+        rule, color = self.rule, self.rule.color
+        width = 2 if rule.is_basic else 4
+        self.tabs.setStyleSheet(
+            f"QTabWidget::pane {{ border:{width}px solid {color}; }}"
+            f"QTabBar::tab:selected {{ border-bottom:{width}px solid {color}; font-weight:bold; }}")
+        self.rule_status.setText(rule.title)
+        self.rule_status.setToolTip(f"命令行写法：--rule {rule.spec}")
+        self.rule_status.setStyleSheet(chip_style(color, filled=not rule.is_basic))
 
     def _populate_maps(self) -> None:
         """刷新地图下拉框：地图库中的地图，以及不在 地图库中的当前地图（外部文件或未保存）。"""
@@ -161,7 +228,8 @@ class MainWindow(QMainWindow):
         """窗口标题显示地图 ID，有未保存修改时加 *。"""
         doc = self.document
         mark = " *" if doc and doc.dirty else ""
-        self.setWindowTitle(f"电脑鼠迷宫探索 — {doc.maze_id if doc else ''}{mark}")
+        self.setWindowTitle(f"电脑鼠迷宫探索 — {doc.maze_id if doc else ''}{mark}"
+                            f"【{self.rule.title}】")
 
     # -- 当前地图 ---------------------------------------------------------
     def set_document(self, doc: MazeDocument) -> None:

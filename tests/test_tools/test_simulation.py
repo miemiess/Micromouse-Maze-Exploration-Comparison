@@ -43,7 +43,8 @@ class RunnerTests(unittest.TestCase):
             self.assertEqual(modes[name], EXPLORE)
         self.assertEqual((modes["bfs"], modes["astar"]), (KNOWN_MAP, KNOWN_MAP))
         self.assertNotIn("", modes)  # 沿墙法的内部基类 _WallFollower
-        self.assertEqual(set(discover_algorithms(mode=KNOWN_MAP)[0]), {"astar", "bfs"})
+        self.assertEqual(set(discover_algorithms(mode=KNOWN_MAP, layer="basic")[0]), {"astar", "bfs"})
+        self.assertEqual(set(discover_algorithms(mode=KNOWN_MAP, layer="ext")[0]), {"rule_optimal"})
         self.assertEqual(load_algorithm("flood_fill").name, "flood_fill")
         self.assertEqual(load_algorithm("basic.algorithms.dfs:DfsStrategy").name, "dfs")
         with self.assertRaises(ValueError):
