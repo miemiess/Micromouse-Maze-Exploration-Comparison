@@ -1,6 +1,6 @@
 # 扩展阶段开发计划（ext）
 
-> 状态：**E0（规则基础设施）与 E1（转弯代价、运动时间模型）已完成，下一项为 E3（懂规则的探索算法）**。基础规则阶段已完成并冻结（标签 `basic-rules-v1`，代码 `src/basic/`，结果 `results/basic/`）。
+> 状态：**E0（规则基础设施）与 E1（转弯代价、运动时间模型）已完成，E3 的四个探索策略已接入（正式对照实验另行制定计划）**。基础规则阶段已完成并冻结（标签 `basic-rules-v1`，代码 `src/basic/`，结果 `results/basic/`）。
 > 本文是扩展阶段的唯一路线图：做什么、按什么顺序、放在哪里、怎样算完成。任务认领见根目录 README 的任务表；可直接交给组员或 AI 执行的子任务说明在 [`tasks/`](tasks/)，协作规则见根目录 `AGENTS.md`。
 
 ## 1. 目标
@@ -76,7 +76,7 @@
 | 阶段 | 任务 | 内容 | 产出位置 | 完成标准 |
 | --- | --- | --- | --- | --- |
 | **0. 基础设施** ✅ | E0 | `Ruleset`（基础规则 + 叠加层）；`Runner` / `run_episode` / 实验框架的 `rule` 参数；`--rule` 命令行；上位机规则面板 | `src/core/rules.py`、`tools/MazesTest/app/rule_bar.py` | 已完成：回归测试通过；`tests/test_ext/test_rules.py` |
-| **1. 转弯代价与启发式搜索** | E1 ✅、E3 | E1 已完成：转弯代价与运动时间模型两个代价层、规则最优参照 `rule_optimal`（`tests/test_ext/test_turn_cost.py`、`test_motion_time.py`）。E3 待做：（格子, 朝向）状态上的 A*（不高估的“曼哈顿 + 转弯下界”启发式）；加权 A*（f = g + w·h，路径 ≤ w 倍最优）；可选 D* Lite（增量重算，对比计算量） | `src/ext/rules/`、`src/ext/algorithms/` | 实验计划先写好；λ / w 只在分层开发集上调；基础算法与懂规则的算法同表比较 |
+| **1. 转弯代价与启发式搜索** | E1 ✅、E3 开发完成 | E1 已完成：转弯代价与运动时间模型两个代价层、规则最优参照 `rule_optimal`（`tests/test_ext/test_turn_cost.py`、`test_motion_time.py`）。E3 已实现：（格子, 朝向）状态上的 A*（不高估的“曼哈顿 + 转弯下界”启发式）；加权 A*（f = g + w·h，路径 ≤ w 倍最优）；D* Lite（单位步长的增量重算）、最近前沿探索（沿确认通路导航） | `src/ext/rules/`、`src/ext/algorithms/` | 实验计划先写好；λ / w 只在分层开发集上调；基础算法与懂规则的算法同表比较 |
 | **2. 两阶段与近似算法** | D5 | 探索 + 冲刺；停止判据：乐观代价 O 与悲观代价 P 满足 P ≤ (1 + ε)·O 时停止，冲刺代价 ≤ (1 + ε)·最短路（ε = 0 时即证明最优后停止） | `src/ext/rules/two_phase.py`、`src/ext/algorithms/` | 判据可证明；“探索 + 冲刺总代价”随 ε 的曲线 |
 | **3. 噪声观测（可选）** | E2 | 先开 Issue 讨论撞墙规则；噪声包装 + 对数几率融合 | `src/ext/rules/noisy_sensor.py` | 多种子重复，报告均值与离散程度 |
 | **可选研究** | D4 | 迷宫难度刻画（环路比例、死胡同比例、分岔数、“欺骗度”）；用模拟退火对抗式生成最坏迷宫 | `src/ext/`、`results/ext/` | 特征与算法表现的关系分析 |
