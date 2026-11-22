@@ -18,6 +18,8 @@ import glob
 import sys
 from pathlib import Path
 
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import QApplication
 
 from simulation import ROOT, Maze, Runner, discover_algorithms  # 先导入：把 src/ 加入路径
@@ -134,6 +136,24 @@ def main(argv: list[str] | None = None) -> int:
 
     from app.main_window import MainWindow
     app.setApplicationName("Micromouse Maze Explorer")
+    app.setStyle("Fusion")
+    hints = app.styleHints()
+    if hasattr(hints, "setColorScheme"):
+        hints.setColorScheme(Qt.ColorScheme.Light)
+    palette = app.style().standardPalette()
+    colors = {
+        QPalette.Window: "#f5f6f8", QPalette.WindowText: "#222831",
+        QPalette.Base: "#ffffff", QPalette.AlternateBase: "#eef0f3",
+        QPalette.Text: "#222831", QPalette.Button: "#f1f2f4",
+        QPalette.ButtonText: "#222831", QPalette.Highlight: "#dce1e7",
+        QPalette.HighlightedText: "#17212c", QPalette.PlaceholderText: "#626a74",
+        QPalette.ToolTipBase: "#ffffff", QPalette.ToolTipText: "#222831",
+    }
+    for role, color in colors.items():
+        palette.setColor(role, QColor(color))
+    for role in (QPalette.Text, QPalette.ButtonText, QPalette.WindowText):
+        palette.setColor(QPalette.Disabled, role, QColor("#757c85"))
+    app.setPalette(palette)
     window = MainWindow(Path(args.maze) if args.maze else None)
     window.select_rule(args.rule)
     window.resize(1320, 860)

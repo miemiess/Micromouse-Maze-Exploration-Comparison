@@ -10,6 +10,28 @@
 | `algorithms/` | 为扩展规则编写的算法，每个算法一个文件；自动发现扫描本目录。共用的搜索与已知墙在 `core/planning.py` | 已有 `rule_optimal.py`（已知地图上的规则最优参照）；E3 探索策略：`turn_aware_astar`、`turn_aware_astar_w2`、`dstar_lite`、`frontier`。后两项按步数选路，在代价叠加层中也可按相同规则评价 |
 | `plan.py` | 扩展实验计划，定义 `PLANS = {名称: (构建函数, "ext/<名称>")}` | 待建 |
 
+## 已实现的算法
+
+上位机的「实时运行」和「同屏对比」使用前四种策略。它们都从当前格的四向观测更新自己的地图。「已知地图规划」页提供第五种算法，作为代价参照。
+
+| 算法 | 怎样选择下一步 | 适合比较的问题 |
+| --- | --- | --- |
+| [turn_aware_astar](algorithms/turn_aware_astar.py) | 假设未知内部边畅通，在（格子，朝向）上按当前规则求最低代价路线。继续沿缓存路线移动，直到新发现的墙阻断剩余路线。 | 把转向或直线段用时计入规划后，实际走出的路线有何变化？ |
+| [turn_aware_astar_w2](algorithms/turn_aware_astar.py) | 沿用同一代价模型与重规划条件，把搜索优先级从 `g + h` 改为 `g + 2h`。 | 加大对剩余代价估计的权重后，扩展状态数和实际移动代价如何变化？两倍代价上界仅适用于当前乐观地图上的单次规划。 |
+| [dstar_lite](algorithms/dstar_lite.py) | 在乐观地图上维护到目标的单位步长距离。发现新墙后，从被阻断边的端点开始修复距离，再沿当前最短路走一步。 | 增量修复与重复 A* 全量重算的计算耗时如何？平局时两者可能选不同路线。 |
+| [frontier](algorithms/frontier.py) | 从当前位置用 BFS 沿确认通路寻找最近的未访问格。同距离的候选中优先选目标格。 | 逐步扩大已探索区域，与直接朝目标乐观规划相比，覆盖率、重复访问和到达步数有何差异？ |
+| [rule_optimal](algorithms/rule_optimal.py) | 读取完整地图，按同一规则计算从起点到目标的最小代价。 | 给出 `optimal_rule_cost`，用于计算实际探索代价与已知地图最优代价之比。 |
+
+**算法下拉框分组。** 上位机按“基础算法”和“扩展算法”列出可选项。启用转弯代价或运动时间后，两种朝向 A* 会移到“为当前规则设计”组。D* Lite 和最近前沿仍按格数选路，运行器会按所选规则给它们的实际轨迹计价。四种策略的整体性能排名有待正式对照实验。
+
+**可复核的样例。** 在仓库根目录运行以下命令，在「已知地图规划」页选择 `rule_optimal`。这张图有“6 步、5 次直角转向”和“8 步、3 次直角转向”两条路线。λ = 2 时，较长路线的代价为 14，短路线为 16；把 λ 调到 1，两条路线的代价均为 11。
+
+```bash
+python tools/MazesTest/maze_app.py tests/test_ext/fixtures/turn_cost_tradeoff.json --rule turn_cost:weight=2
+```
+
+测试分别覆盖[朝向 A* 与加权变体](../../tests/test_ext/test_turn_aware_astar.py)、[增量距离修复与确认通路](../../tests/test_ext/test_incremental_frontier.py)和[公共搜索与规则接入](../../tests/test_ext/test_planning.py)。
+
 ## 接入规则（人和 AI 都按这里做）
 
 1. **只依赖公共接口**：从 `core.algorithm_api`、`core.environment`、`core.experiments` 导入；需要复用基础算法时从 `basic.algorithms.<模块>` 导入，不复制代码。

@@ -14,9 +14,9 @@
 from dataclasses import fields
 
 from PySide6.QtCore import QSignalBlocker, Qt, Signal
-from PySide6.QtGui import QBrush, QColor
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (QComboBox, QDoubleSpinBox, QFrame, QHBoxLayout, QLabel, QPushButton,
-                               QVBoxLayout, QWidget)
+                               QStyledItemDelegate, QStyleOptionViewItem, QVBoxLayout, QWidget)
 
 from core.rules import BASIC, BASIC_COLOR, DIMENSIONS, Ruleset, available_layers
 
@@ -196,30 +196,84 @@ class RulePanel(QFrame):
             f" border-left:8px solid {color}; border-bottom:1px solid {tinted(color, 120)}; }}")
 
 
-def update_algorithms(widget, infos, rule: Ruleset) -> None:
-    """按规则启用 / 禁用算法项（保留已有选择）；单选下拉框的当前项失效时改选第一个可用项。
+class AlgorithmGroupDelegate(QStyledItemDelegate):
+    """在每组首项上方绘制标题，使键盘导航只经过算法。"""
 
-    为当前规则叠加层设计的算法（类属性 designed_for）用规则颜色加粗显示，一眼区分“懂规则”的算法。
-    """
+    title_role = Qt.UserRole + 1
+
+    def sizeHint(self, option, index):
+        size = super().sizeHint(option, index)
+        title = index.data(self.title_role)
+        if title:
+            size.setHeight(size.height() + option.fontMetrics.height() + 8)
+            size.setWidth(max(size.width(), option.fontMetrics.horizontalAdvance(title) + 20))
+        return size
+
+    def paint(self, painter, option, index):
+        title = index.data(self.title_role)
+        if title:
+            option = QStyleOptionViewItem(option)
+            height = option.fontMetrics.height() + 8
+            heading = option.rect.adjusted(6, 0, 0, 0)
+            heading.setHeight(height)
+            painter.save()
+            painter.fillRect(option.rect.adjusted(0, 0, 0, height - option.rect.height()),
+                             option.palette.window())
+            painter.setPen(option.palette.windowText().color())
+            font = option.font
+            font.setBold(True)
+            painter.setFont(font)
+            painter.drawText(heading, Qt.AlignLeft | Qt.AlignVCenter, title)
+            painter.restore()
+            option.rect = option.rect.adjusted(0, height, 0, 0)
+        super().paint(painter, option, index)
+
+
+def populate_algorithm_combo(combo, infos, rule: Ruleset) -> None:
+    """按当前规则和算法来源分组；标题不可选，切换规则时保留可用的原选项。"""
+    previous = combo.currentData()
+    groups = {"为当前规则设计": [], "基础算法": [], "扩展算法": []}
+    for info in infos.values():
+        if info.designed_for_rule(rule):
+            group = "为当前规则设计"
+        else:
+            group = "扩展算法" if info.layer == "ext" else "基础算法"
+        groups[group].append(info)
+
+    with QSignalBlocker(combo):
+        if not isinstance(combo.itemDelegate(), AlgorithmGroupDelegate):
+            combo.setItemDelegate(AlgorithmGroupDelegate(combo))
+        combo.clear()
+        first_enabled = -1
+        selected = -1
+        for title, members in groups.items():
+            if not members:
+                continue
+            for offset, info in enumerate(members):
+                combo.addItem(info.name, info.name)
+                index = combo.count() - 1
+                item = combo.model().item(index)
+                if offset == 0:
+                    item.setData(title, AlgorithmGroupDelegate.title_role)
+                if not rule.supports(info):
+                    item.setEnabled(False)
+                    item.setToolTip(f"该算法不支持{rule.title}")
+                    continue
+                if first_enabled == -1:
+                    first_enabled = index
+                if info.name == previous:
+                    selected = index
+        combo.setCurrentIndex(selected if selected >= 0 else first_enabled)
+
+
+def update_algorithms(widget, infos, rule: Ruleset) -> None:
+    """更新对比和批量实验的勾选列表，保留选择及勾选状态。"""
     with QSignalBlocker(widget):
-        combo = isinstance(widget, QComboBox)
         for index in range(widget.count()):
-            item = widget.model().item(index) if combo else widget.item(index)
-            name = item.data(Qt.UserRole) or item.text()
-            info = infos[name]
+            item = widget.item(index)
+            info = infos[item.data(Qt.UserRole) or item.text()]
             enabled = rule.supports(info)
-            designed = info.designed_for_rule(rule)
-            font = item.font()
-            font.setBold(designed)
-            item.setFont(font)
-            item.setForeground(QBrush(QColor(rule.color)) if designed else QBrush())
             item.setToolTip(f"该算法不支持{rule.title}" if not enabled
-                            else f"为{rule.title}设计" if designed else "")
-            if combo:
-                item.setEnabled(enabled)
-            else:
-                flags = item.flags()
-                item.setFlags(flags | Qt.ItemIsEnabled if enabled else flags & ~Qt.ItemIsEnabled)
-        if combo and (widget.currentIndex() < 0 or not widget.model().item(widget.currentIndex()).isEnabled()):
-            widget.setCurrentIndex(next((i for i in range(widget.count())
-                                         if widget.model().item(i).isEnabled()), -1))
+                            else f"为{rule.title}设计" if info.designed_for_rule(rule) else "")
+            flags = item.flags()
+            item.setFlags(flags | Qt.ItemIsEnabled if enabled else flags & ~Qt.ItemIsEnabled)

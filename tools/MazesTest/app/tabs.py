@@ -22,7 +22,7 @@ from simulation import ROOT, AlgorithmInfo, Direction, Maze, Runner  # 先导入
 from maze_document import GENERATORS, MazeDocument, generate
 
 from core.rules import BASIC, Ruleset  # noqa: E402
-from .rule_bar import tinted, update_algorithms
+from .rule_bar import populate_algorithm_combo, tinted, update_algorithms
 from .export import export_gif, render_image, save_png, snapshot_title, tile_images
 from .maze_view import MazeView, ViewOptions
 
@@ -375,8 +375,7 @@ class RunTab(QWidget):
 
         algo_box = QGroupBox("已知地图算法" if known_map else "探索算法（未知地图）")
         self.algorithm = QComboBox()
-        self.algorithm.addItems(strategies)
-        update_algorithms(self.algorithm, strategies, self.rule)
+        populate_algorithm_combo(self.algorithm, strategies, self.rule)
         self.algorithm.currentTextChanged.connect(self.rebuild)
         self.description = QLabel(wordWrap=True)
         self.description.setStyleSheet("color:#555")
@@ -440,7 +439,7 @@ class RunTab(QWidget):
     def set_rule(self, rule: Ruleset) -> None:
         """切换规则：更新可用算法与规则指标框，并从起点重新运行。"""
         self.rule = rule
-        update_algorithms(self.algorithm, self.strategies, rule)
+        populate_algorithm_combo(self.algorithm, self.strategies, rule)
         cost = rule.cost_layer
         self.rule_box.setVisible(cost is not None)
         if cost is not None:
@@ -459,7 +458,7 @@ class RunTab(QWidget):
 
     def rebuild(self) -> None:
         """按当前地图、算法、种子和预算新建 Runner。"""
-        name = self.algorithm.currentText()
+        name = self.algorithm.currentData()
         info = self.strategies.get(name)
         self.description.setText(algorithm_description(info, self.rule) if info else "没有这一类算法")
         self.log.clear()
@@ -498,7 +497,7 @@ class RunTab(QWidget):
 
     def export_gif(self) -> None:
         """按当前设置从头运行一次，把完整过程导出为 GIF。"""
-        info = self.strategies.get(self.algorithm.currentText())
+        info = self.strategies.get(self.algorithm.currentData())
         if self.maze is None or info is None:
             return
         path = ask_save_path(self, "导出 GIF", f"{self.maze.maze_id}_{info.name}.gif",

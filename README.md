@@ -11,7 +11,7 @@ Computational Thinking for AI 小组项目（Track A：自主机器人导航与�
 | 阶段 | 状态 | 入口 |
 | --- | --- | --- |
 | **基础规则**（16×16、每步代价 1、理想观测） | ✅ 已完成并冻结，标签 `basic-rules-v1` | 代码 [`src/basic/`](src/basic/README.md) · 结果 [`results/basic/`](results/README.md) · 文档 [`Docs/basic/`](Docs/README.md) |
-| **扩展规则**（转弯代价、两阶段、噪声；启发式与近似算法） | 🟡 E0 规则基础设施、E1 转弯代价与运动时间模型已完成；E3 四个探索策略已接入上位机 | 路线图 [`Docs/ext/dev-plan.md`](Docs/ext/dev-plan.md) · 代码 [`src/ext/`](src/ext/README.md) |
+| **扩展规则**（转弯代价、两阶段、噪声；启发式与近似算法） | 🟡 E0 规则基础设施、E1 转弯代价与运动时间模型已完成；E3 四个探索策略已接入上位机 | 路线图 [`Docs/ext/dev-plan.md`](Docs/ext/dev-plan.md) · [四种探索策略与最优参照](src/ext/README.md#已实现的算法) |
 | **最终报告** | 🟡 中文初稿，扩展结果、英文定稿、贡献记录待完成 | [`Docs/Result.md`](Docs/Result.md) |
 
 **基础阶段的主要结论**（详见报告第 2、4 章）：
@@ -114,7 +114,7 @@ mazes/                     地图：classic/ 下全部地图（外部迷宫库 e
 | 问题定义、计算模型 | 报告第 1 章；`src/README.md`；`src/core/environment.py` |
 | 算法设计与选择理由 | 报告 2.1、2.6、第 4 章；`Docs/basic/algorithm-methods.md`、`algorithm-design.md` |
 | 复杂度分析 | 报告 2.2、4.2；算法登记表 |
-| 启发式 / 近似算法 | 基础：新方案与消融（第 4 章）；扩展：加权 A*、ε 提前停止（阶段 1、2） |
+| 启发式 / 近似算法 | 基础：新方案与消融（第 4 章）；扩展：已实现 w = 2 的加权 A*；ε 提前停止列入 D5 |
 | Python 概念验证 | `src/`、`tools/MazesTest/` |
 | 实验评价 | `Docs/basic/experiment-plan.md`；`results/basic/`；扩展：`results/ext/` |
 | 局限与改进 | 报告 2.7、第 5 章 |
