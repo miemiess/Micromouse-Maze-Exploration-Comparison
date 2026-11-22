@@ -5,9 +5,9 @@
     - cost（代价模型）：如转弯代价、运动时间模型（src/ext/rules/turn_cost.py、motion_time.py）；
     - observation（观测模型）：如传感器噪声（src/ext/rules/noisy_sensor.py，会改变观测，只对声明支持的算法开放）；
     - contact（撞墙处理）：撞墙后是否继续、累计几次终止（src/ext/rules/collision.py）；
-    - flow（比赛流程）：如两阶段探索 + 冲刺（规划中）。
-层通过两个钩子影响运行：env_options() 返回创建 MazeEnvironment 的关键字参数（按维度顺序合并，后者覆盖前者），
-wrap_env(env) 包装环境（观测层在这里加噪声）。
+    - flow（比赛流程）：两阶段探索 + 冲刺（src/ext/rules/two_phase.py）。
+层通过三个钩子影响运行：env_options() 返回创建 MazeEnvironment 的关键字参数（按维度顺序合并，后者覆盖前者），
+wrap_env(env) 包装环境（观测层在这里加噪声），summarize(record) 在运行结束后追加指标（两阶段规则的冲刺与总分）。
 具体的层写在 src/ext/rules/ 的模块里，模块中的 LAYERS 列表会被 available_layers() 自动发现，
 本模块不导入任何具体规则，因此基础规则不依赖扩展层。
 
@@ -124,6 +124,14 @@ class RuleLayer:
 
     def env_options(self) -> dict:
         """创建 MazeEnvironment 时的关键字参数（如 collision_limit）；默认无。"""
+        return {}
+
+    def summarize(self, record) -> dict:
+        """运行结束后追加到运行结果的指标；默认无。
+
+        record 的属性：maze、rule、status、position、heading（结束时的位置与朝向）、
+        known_open（已确认可走的边）、explore_cost（运行中的规则代价，没有代价层时为步数）。
+        """
         return {}
 
     def wrap_env(self, env):

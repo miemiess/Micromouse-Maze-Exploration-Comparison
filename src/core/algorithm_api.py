@@ -25,6 +25,7 @@
 import importlib
 import inspect
 import traceback
+from types import SimpleNamespace
 from dataclasses import dataclass, field
 from pathlib import Path
 from time import perf_counter
@@ -132,6 +133,8 @@ class ExplorationStrategy(Protocol):
         configure(rule) -> None        每次 reset 前收到当前规则（core.rules.Ruleset）
     可选类属性：
         designed_for = ("turn_cost",)  为哪些规则层设计（层 key）；只用于界面标记与实验分组，不限制运行
+        explores_after_goal = True     两阶段规则下到达目标后继续探索，返回 None 表示结束探索；
+                                       未声明的算法第一次到达目标即结束探索
         supported_rules = {...}        支持哪些改变观测的层；未声明时这类层拒绝运行
     """
 
@@ -430,12 +433,17 @@ class Runner:
         self._meter = self.rule.new_meter(self.maze.start_heading)  # 规则代价的增量计价器
         observation = self.env.reset()
         self._observation = observation
+        self._layer_summary: dict | None = None
         if self.mode == KNOWN_MAP:
             self._observed: set[Edge] = set(maze_walls(self.maze))  # 地图完全已知
+            self._known_open: set[Edge] = {frozenset((c, n)) for c in self._all_cells()
+                                           for _, n in open_neighbours(self.maze, c)}
             new_walls = frozenset()
         else:
             self._observed = set()
+            self._known_open = set()   # 已确认可走的边（两阶段规则的冲刺只能走这些边）
             new_walls = self._record_walls(observation)
+            self._record_open(observation)
         try:
             configure = getattr(self.algorithm, "configure", None)
             if configure is not None:
@@ -460,10 +468,23 @@ class Runner:
         return self._last
 
     def summary(self) -> dict:
-        """返回环境统计结果，compute_seconds 为本运行器测得的算法耗时。"""
+        """返回环境统计结果，compute_seconds 为本运行器测得的算法耗时。
+
+        运行结束后另含各规则层 summarize() 给出的指标（如两阶段规则的冲刺代价与总分）。
+        """
         summary = self.env.summary(compute_seconds=self.compute_seconds)
         if self._meter is not None:  # 基础规则没有计价器，结果字段与 basic-rules-v1 完全相同
             summary["rule_cost"] = self._meter.total
+        if self.finished and self.rule.layers:
+            if self._layer_summary is None:
+                record = SimpleNamespace(
+                    maze=self.maze, rule=self.rule, status=self.env.status, position=self.env.position,
+                    heading=self.env.heading, known_open=frozenset(self._known_open),
+                    explore_cost=summary.get("rule_cost", summary["steps"]))
+                self._layer_summary = {}
+                for layer in self.rule.layers:
+                    self._layer_summary.update(layer.summarize(record))
+            summary.update(self._layer_summary)
         return summary
 
     # -- 推进 -------------------------------------------------------------
@@ -484,9 +505,12 @@ class Runner:
             if self.compute_seconds > self.time_budget:
                 self.env.finish("timeout")
             elif direction is None:
-                # 策略可设 loop_detected = True，说明是判定陷入循环而不是确认无路
-                self.env.finish("loop_detected" if getattr(self.strategy, "loop_detected", False)
-                                else "no_path")
+                if self.env.goal_reached and not self.env.stop_at_goal:
+                    self.env.finish("success")       # 两阶段规则：策略结束探索
+                else:
+                    # 策略可设 loop_detected = True，说明是判定陷入循环而不是确认无路
+                    self.env.finish("loop_detected" if getattr(self.strategy, "loop_detected", False)
+                                    else "no_path")
             else:
                 result = self.env.step(direction)
                 moved = result.moved
@@ -502,6 +526,12 @@ class Runner:
                     blocked = (self.env.position, direction)
                 if self.mode == EXPLORE and (moved or result.collided):
                     new_walls = self._record_walls(self._observation)
+                    self._record_open(self._observation)
+                if moved:
+                    self._known_open.add(frozenset((self.env.path[-2], self.env.path[-1])))
+                if (self.env.status == "running" and self.env.goal_reached and not self.env.stop_at_goal
+                        and not getattr(self.algorithm, "explores_after_goal", False)):
+                    self.env.finish("success")       # 两阶段规则：不会继续探索的算法第一次到达目标即结束探索
         except Exception:
             self._fail()
         self._last = self._snapshot(moved=moved, new_walls=new_walls,
@@ -543,6 +573,18 @@ class Runner:
                     new.add(wall)
         self._observed |= new
         return frozenset(new)
+
+    def _record_open(self, observation: Observation) -> None:
+        """记录观测确认可走的边；改变观测的规则（噪声）下读数不可信，只记实际走过的边。"""
+        if self.rule.changes_observation:
+            return
+        for direction in ORDER:
+            neighbour = step_cell(observation.position, direction)
+            if direction not in observation.walls and inside(neighbour, self.maze.width, self.maze.height):
+                self._known_open.add(frozenset((observation.position, neighbour)))
+
+    def _all_cells(self):
+        return ((x, y) for x in range(self.maze.width) for y in range(self.maze.height))
 
     def _update_debug(self) -> bool:
         """读取算法的 debug_view()，返回预测路线是否发生了非顺延的改变。"""

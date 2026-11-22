@@ -51,6 +51,9 @@ KNOWN_MAP_STAT_ROWS = [("扩展节点", "expanded_nodes")]
 # 扩展规则（有代价层）时显示的规则指标：(显示名, 键)。rule_cost 来自 Runner；其余由页面计算。
 RULE_STAT_ROWS = [("规则代价", "rule_cost"), ("规则最优代价", "optimal_rule_cost"),
                   ("代价 / 最优", "rule_cost_ratio")]
+# 两阶段规则（flow 层）运行结束后的指标，来自 Runner.summary（运行中显示 "-"）。
+FLOW_STAT_ROWS = [("探索代价（含返回）", "explore_cost"), ("冲刺代价", "sprint_cost"),
+                  ("冲刺 / 最优", "sprint_ratio"), ("成绩", "total_score")]
 
 
 def format_cost(rule: Ruleset, value) -> str:
@@ -62,11 +65,21 @@ def format_cost(rule: Ruleset, value) -> str:
 
 
 def rule_metrics(rule: Ruleset, snap, optimal) -> dict:
-    """快照的规则指标：规则代价、最优代价，以及成功到达时的代价 / 最优。"""
+    """快照的规则指标：规则代价、最优代价，以及成功到达时的代价 / 最优；两阶段规则另有探索、冲刺与成绩。"""
     cost = snap.stats.get("rule_cost") if snap else None
     ratio = cost / optimal if cost is not None and optimal and snap.status == "success" else None
-    return {"rule_cost": format_cost(rule, cost), "optimal_rule_cost": format_cost(rule, optimal),
-            "rule_cost_ratio": f"{ratio:.3f}" if ratio is not None else "-"}
+    values = {"rule_cost": format_cost(rule, cost), "optimal_rule_cost": format_cost(rule, optimal),
+              "rule_cost_ratio": f"{ratio:.3f}" if ratio is not None else "-"}
+    stats = snap.stats if snap else {}
+    for _, key in FLOW_STAT_ROWS:
+        value = stats.get(key)
+        values[key] = "-" if value is None else f"{value:.3f}" if key == "sprint_ratio" else format_cost(rule, value)
+    return values
+
+
+def has_rule_metrics(rule: Ruleset) -> bool:
+    """是否显示规则指标框：有代价层或比赛流程层。"""
+    return rule.cost_layer is not None or rule.layer("flow") is not None
 
 
 def algorithm_description(info, rule: Ruleset) -> str:
@@ -406,7 +419,7 @@ class RunTab(QWidget):
         self.rule_formula = QLabel(wordWrap=True)
         rule_form.addRow(self.rule_formula)
         self.rule_labels = {}
-        for title, key in RULE_STAT_ROWS:
+        for title, key in RULE_STAT_ROWS + FLOW_STAT_ROWS:
             self.rule_labels[key] = QLabel("-")
             rule_form.addRow(title, self.rule_labels[key])
         self.rule_box.hide()
@@ -440,12 +453,13 @@ class RunTab(QWidget):
         """切换规则：更新可用算法与规则指标框，并从起点重新运行。"""
         self.rule = rule
         populate_algorithm_combo(self.algorithm, self.strategies, rule)
-        cost = rule.cost_layer
-        self.rule_box.setVisible(cost is not None)
-        if cost is not None:
+        cost, flow = rule.cost_layer, rule.layer("flow")
+        self.rule_box.setVisible(has_rule_metrics(rule))
+        if has_rule_metrics(rule):
             self.rule_box.setTitle(f"规则指标 · {rule.title}")
             self.rule_box.setStyleSheet(rule_box_style(rule))
-            self.rule_formula.setText(f"<b style='color:{rule.color}'>{cost.formula}</b>")
+            text = "<br>".join(x for x in (cost.formula if cost else "", flow.summary if flow else "") if x)
+            self.rule_formula.setText(f"<b style='color:{rule.color}'>{text}</b>")
         self.rebuild()
 
     def set_maze(self, maze: Maze | None, message: str = "") -> None:
@@ -520,7 +534,7 @@ class RunTab(QWidget):
         self.view.set_snapshot(last)
         for key, label in self.stat_labels.items():
             label.setText(format_stat(key, last.stats.get(key)))
-        if self.rule.cost_layer:
+        if has_rule_metrics(self.rule):
             values = rule_metrics(self.rule, last, self._optimal[0] if self._optimal else None)
             for key, label in self.rule_labels.items():
                 label.setText(values[key])
@@ -639,7 +653,7 @@ class CompareTab(QWidget):
         """切换规则：更新可用算法与表格列（扩展规则下加“规则代价”，并按它评最优），重新运行。"""
         self.rule = rule
         update_algorithms(self.algorithms, self.strategies, rule)
-        self.columns = self.COLUMNS + ([("规则代价", "rule_cost")] if rule.cost_layer else [])
+        self.columns = self.COLUMNS + ([("规则代价", "rule_cost")] if rule.cost_layer else [])             + ([("成绩", "total_score")] if rule.layer("flow") else [])
         self.table.setColumnCount(len(self.columns))
         self.table.setHorizontalHeaderLabels([c[0] for c in self.columns])
         self.rebuild()
@@ -710,19 +724,20 @@ class CompareTab(QWidget):
         """
         snaps = [batch[-1] if batch else runner.snapshot()
                  for batch, runner in zip(batches, self.runners)]
-        score_key = "rule_cost" if self.rule.cost_layer else "steps"
+        # 两阶段规则按成绩（冲刺 + 探索 / 系数）评最优，其次按规则代价，基础规则按步数
+        score_key = "total_score" if self.rule.layer("flow") else "rule_cost" if self.rule.cost_layer else "steps"
         for (label, view), runner, snap in zip(self.views, self.runners, snaps):
             view.set_snapshot(snap)
             extra = (f" · 代价 {format_cost(self.rule, snap.stats.get('rule_cost'))}"
                      if self.rule.cost_layer else "")
             label.setText(f"{runner.name} · {STATUS_TEXT.get(snap.status, snap.status)}"
                           f" · {snap.stats['steps']} 步{extra}")
-        finished = [s.stats[score_key] for s in snaps if s.status == "success"]
+        finished = [s.stats[score_key] for s in snaps if s.status == "success" and s.stats.get(score_key) is not None]
         best = min(finished) if finished else None
         for row, (runner, snap) in enumerate(zip(self.runners, snaps)):
-            is_best = best is not None and snap.status == "success" and snap.stats[score_key] == best
+            is_best = best is not None and snap.status == "success" and snap.stats.get(score_key) == best
             for col, (_, key) in enumerate(self.columns):
-                if key == "rule_cost":
+                if key in ("rule_cost", "total_score"):
                     text = format_cost(self.rule, snap.stats.get(key))
                 else:
                     text = runner.name if key is None else format_stat(key, snap.stats.get(key))

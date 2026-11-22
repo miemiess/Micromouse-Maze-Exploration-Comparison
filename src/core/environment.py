@@ -139,7 +139,7 @@ class MazeEnvironment:
     """管理电脑鼠的位置、观测、移动和本次运行的统计。"""
 
     def __init__(self, maze: Maze, max_steps: int | None = None, *, collision_limit: int | None = 1,
-                 seed: int | None = None):
+                 seed: int | None = None, stop_at_goal: bool = True):
         """创建环境并回到起点。
 
         Args:
@@ -149,6 +149,9 @@ class MazeEnvironment:
                 N > 1 时撞墙原地转向、不移动，第 N 次记为 collision_limit；None 为不限次数。
                 由撞墙处理层（src/ext/rules/collision.py）或噪声观测层设置。
             seed: 运行的随机种子，只供规则层的环境包装（如噪声观测）读取，环境本身不使用随机数。
+            stop_at_goal: True（基础规则）到达目标即 success；False（两阶段规则的探索阶段）到达目标只记
+                goal_reached，由执行器在策略结束探索时调用 finish("success")；动作预算耗尽时，
+                到过目标记为 success，否则 budget_exceeded。
 
         Raises:
             TypeError: maze 不是 Maze。
@@ -165,6 +168,7 @@ class MazeEnvironment:
             raise ValueError("collision_limit must be a positive integer or None")
         self.collision_limit = collision_limit
         self.seed = seed
+        self.stop_at_goal = stop_at_goal
         self.maze_id, self.width, self.height = maze.maze_id, maze.width, maze.height  # 公开的地图尺寸，不含墙
         self._maze = maze
         self.max_steps = max_steps
@@ -182,9 +186,10 @@ class MazeEnvironment:
         self.actions = self.collisions = 0
         self.collision_wall = None
         self.path = [self.position]
-        # 起点已访问一次，但不算重复访问；起点也是目标时立即成功。
+        # 起点已访问一次，但不算重复访问；起点也是目标时立即成功（两阶段规则下只记为到过目标）。
         self._visited = {self.position}
-        self.status = "success" if self.position in self._maze.goals else "running"
+        self.goal_reached = self.position in self._maze.goals
+        self.status = "success" if self.goal_reached and self.stop_at_goal else "running"
         return self.observe()
 
     def observe(self):
@@ -240,7 +245,7 @@ class MazeEnvironment:
             if self.collision_limit is not None and self.collisions >= self.collision_limit:
                 self.status = "collision_limit"
             elif self.actions >= self.max_steps:
-                self.status = "budget_exceeded"
+                self.status = self._budget_status()
             return StepResult(self.observe(), self.status, False, True)
         dx, dy = _DELTAS[direction]
         self.position = (self.position[0] + dx, self.position[1] + dy)
@@ -252,16 +257,23 @@ class MazeEnvironment:
         self.path.append(self.position)
         # 到达目标优先于预算耗尽，因此最后一步到达目标仍算成功。
         if self.position in self._maze.goals:
+            self.goal_reached = True
+        if self.goal_reached and self.stop_at_goal:
             self.status = "success"
         elif self.actions >= self.max_steps:
-            self.status = "budget_exceeded"
+            self.status = self._budget_status()
         return StepResult(self.observe(), self.status, True)
+
+    def _budget_status(self) -> str:
+        """动作预算耗尽时的状态：两阶段规则下到过目标视为探索结束（success）。"""
+        return "success" if self.goal_reached and not self.stop_at_goal else "budget_exceeded"
 
     def finish(self, status):
         """由外部执行器记录无路、超时或异常等结束状态。
 
         Args:
-            status: "no_path"、"loop_detected"、"timeout" 或 "error"。
+            status: "no_path"、"loop_detected"、"timeout" 或 "error"；两阶段规则（stop_at_goal 为
+                False）下到过目标后还可以是 "success"（策略结束探索）。
 
         Raises:
             RuntimeError: 运行已经结束。
@@ -269,7 +281,10 @@ class MazeEnvironment:
         """
         if self.status != "running":
             raise RuntimeError("run has already ended")
-        if status not in {"no_path", "loop_detected", "timeout", "error"}:
+        allowed = {"no_path", "loop_detected", "timeout", "error"}
+        if self.goal_reached and not self.stop_at_goal:
+            allowed.add("success")
+        if status not in allowed:
             raise ValueError("invalid externally supplied status")
         self.status = status
 
@@ -291,4 +306,6 @@ class MazeEnvironment:
                    "peak_memory_bytes": peak_memory_bytes}
         if self.collision_limit != 1:
             summary.update(actions=self.actions, collisions=self.collisions)
+        if not self.stop_at_goal:
+            summary["goal_reached"] = self.goal_reached
         return summary

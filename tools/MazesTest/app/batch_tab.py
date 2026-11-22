@@ -33,6 +33,7 @@ SUMMARY_COLUMNS = [("算法", "algorithm"), ("成功", "success"), ("运行", "r
 # 扩展规则（有代价层）时汇总表追加的列。
 RULE_SUMMARY_COLUMNS = [("规则代价/最优（均值）", "mean_rule_cost_ratio"),
                         ("中位数", "median_rule_cost_ratio")]
+FLOW_SUMMARY_COLUMNS = [("冲刺/最优（均值）", "mean_sprint_ratio"), ("平均成绩", "mean_total_score")]
 TIME_SLICE = 0.05  # 每次定时器回调最多运行的秒数，保证界面响应
 
 
@@ -193,7 +194,7 @@ class BatchTab(QWidget):
         rule = self.rule
         self.rule_label.setText(f"本页实验规则：{rule.title}" + ("" if rule.is_basic else "（结果单独保存，不与基础规则混排）"))
         self.rule_label.setStyleSheet(chip_style(rule.color, filled=not rule.is_basic))
-        self.columns = SUMMARY_COLUMNS + (RULE_SUMMARY_COLUMNS if rule.cost_layer else [])
+        self.columns = SUMMARY_COLUMNS + (RULE_SUMMARY_COLUMNS if rule.cost_layer else [])             + (FLOW_SUMMARY_COLUMNS if rule.layer("flow") else [])
         self.table.setColumnCount(len(self.columns))
         self.table.setHorizontalHeaderLabels([c[0] for c in self.columns])
 

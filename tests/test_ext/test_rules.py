@@ -77,7 +77,7 @@ class RulesetTests(unittest.TestCase):
         self.assertEqual(layers["motion_time"], MotionTimeLayer)
         self.assertTrue(all(issubclass(layers[k], CostLayer) for k in ("turn_cost", "motion_time")))
         self.assertEqual({k: c.dimension for k, c in layers.items() if k not in ("turn_cost", "motion_time")},
-                         {"collision": "contact", "noisy_sensor": "observation"})
+                         {"collision": "contact", "noisy_sensor": "observation", "two_phase": "flow"})
         self.assertEqual(set(preset_rules()), {"basic", *layers})
 
     def test_core_does_not_import_ext(self):

@@ -56,6 +56,9 @@ SUMMARY_FIELDS = ["map_group", "algorithm", "experiment_mode", "runs", "success"
                   "mean_repeat_visits", "mean_coverage", "median_compute_ms", "mean_expanded_nodes"]
 # 扩展规则（有代价层）时追加的列；基础规则不写这些列，输出格式与 basic-rules-v1 相同。
 RULE_RUN_FIELDS = ["rule", "rule_cost", "optimal_rule_cost", "rule_cost_ratio"]
+# 两阶段规则（flow 层）下追加的列：探索（含返回起点）、冲刺、成绩（见 src/ext/rules/two_phase.py）
+FLOW_RUN_FIELDS = ["explore_cost", "return_cost", "sprint_cost", "optimal_sprint_cost", "sprint_ratio", "total_score"]
+FLOW_SUMMARY_FIELDS = ["mean_explore_cost", "mean_sprint_ratio", "mean_total_score"]
 RULE_SUMMARY_FIELDS = ["mean_rule_cost", "mean_rule_cost_ratio", "median_rule_cost_ratio",
                        "max_rule_cost_ratio"]
 
@@ -139,7 +142,13 @@ class ExperimentRun:
     def run_fields(self) -> list[str]:
         """runs.csv 的列：基础列，扩展规则下另加规则代价列。"""
         collision_fields = ["actions", "collisions"] if self.rule.collision_limit != 1 else []
-        return RUN_FIELDS + collision_fields + (RULE_RUN_FIELDS if self.has_rule_cost else [])
+        flow_fields = FLOW_RUN_FIELDS if self.has_flow else []
+        return RUN_FIELDS + collision_fields + (RULE_RUN_FIELDS if self.has_rule_cost else []) + flow_fields
+
+    @property
+    def has_flow(self) -> bool:
+        """规则是否含比赛流程层（两阶段），此时结果追加探索 / 冲刺 / 成绩列。"""
+        return self.rule.layer("flow") is not None
 
     def _maze(self, path: Path) -> tuple[Maze, int | None, float | None]:
         """读取地图，计算已知地图最短路长度与本规则下的最优代价（不可达时为 None），结果缓存。"""
@@ -181,6 +190,8 @@ class ExperimentRun:
         }
         if self.rule.collision_limit != 1:
             row.update(actions=first["actions"], collisions=first["collisions"])
+        if self.has_flow:
+            row.update({k: "" if first.get(k) is None else first[k] for k in FLOW_RUN_FIELDS})
         if self.has_rule_cost:
             cost = first.get("rule_cost")
             row.update({"rule": self.rule.key, "rule_cost": cost,
@@ -275,6 +286,12 @@ def summarize(rows: list[dict]) -> list[dict]:
                 "median_rule_cost_ratio": round(statistics.median(cost_ratios), 3) if cost_ratios else "",
                 "max_rule_cost_ratio": max(cost_ratios) if cost_ratios else "",
             })
+        if any("total_score" in r for r in runs):
+            summary[-1].update({
+                "mean_explore_cost": mean([r["explore_cost"] for r in ok]),
+                "mean_sprint_ratio": mean([r["sprint_ratio"] for r in ok]),
+                "mean_total_score": mean([r["total_score"] for r in ok]),
+            })
     return summary
 
 
@@ -288,7 +305,8 @@ def write_outputs(run: ExperimentRun, out_dir: Path, *, plot: bool = True) -> Pa
         writer.writerows(run.rows)
     summary = summarize(run.rows)
     with (out_dir / "summary.csv").open("w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=SUMMARY_FIELDS + (RULE_SUMMARY_FIELDS if run.has_rule_cost else []))
+        writer = csv.DictWriter(f, fieldnames=SUMMARY_FIELDS + (RULE_SUMMARY_FIELDS if run.has_rule_cost else [])
+                                + (FLOW_SUMMARY_FIELDS if run.has_flow else []))
         writer.writeheader()
         writer.writerows(summary)
     heading = "" if run.rule.is_basic else f"# 规则：{run.rule.title}\n\n"
@@ -323,6 +341,13 @@ def summary_markdown(summary: list[dict]) -> str:
             lines += [f"| {s['map_group']} | {s['algorithm']} | {s['mean_rule_cost']} | "
                       f"{s['mean_rule_cost_ratio']} | {s['median_rule_cost_ratio']} | {s['max_rule_cost_ratio']} |"
                       for s in rows]
+            lines.append("")
+        if any("mean_total_score" in s for s in rows):
+            lines += ["两阶段比赛（成功运行；探索代价含返回起点，冲刺/最优的分母为已知地图上的最优冲刺代价）：", "",
+                      "| 地图组 | 算法 | 平均探索代价 | 冲刺/最优（均值） | 平均成绩 |",
+                      "| --- | --- | --- | --- | --- |"]
+            lines += [f"| {s['map_group']} | {s['algorithm']} | {s['mean_explore_cost']} | "
+                      f"{s['mean_sprint_ratio']} | {s['mean_total_score']} |" for s in rows]
             lines.append("")
     return "\n".join(lines)
 
