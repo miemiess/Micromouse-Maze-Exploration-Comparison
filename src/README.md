@@ -24,7 +24,7 @@ src/
   ext/                    扩展层（开发中）：新规则与为新规则写的算法，见 ext/README.md
     rules/                  叠加层：turn_cost.py（转弯代价）、motion_time.py（运动时间）、noisy_sensor.py（噪声观测）、collision.py（撞墙处理）
     algorithms/             扩展算法（自动发现扫描本目录）：rule_optimal.py（规则最优参照）
-    plan.py                 （待建）扩展实验计划，注册为 --plan <名称>
+    plan.py                 扩展实验计划：--plan ext_turn、--plan ext_noise（地图划分 mazes/splits/ext_dev.json）
 ```
 
 **新代码放哪里**：

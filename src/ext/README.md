@@ -8,7 +8,7 @@
 | --- | --- | --- |
 | `rules/` | 叠加层（`core.rules.RuleLayer` 子类，模块中列入 `LAYERS` 即被自动发现）：代价模型、观测模型、撞墙处理、比赛流程 | 已有 `turn_cost.py`（转弯代价，E1）、`motion_time.py`（运动时间模型，E1）、`noisy_sensor.py`（噪声观测，E2）、`collision.py`（撞墙处理） |
 | `algorithms/` | 为扩展规则编写的算法，每个算法一个文件；自动发现扫描本目录。共用的搜索与已知墙在 `core/planning.py` | 已有 `rule_optimal.py`（已知地图上的规则最优参照）；E3 探索策略：`turn_aware_astar`、`turn_aware_astar_w2`、`dstar_lite`、`frontier`。后两项按步数选路，在代价叠加层中也可按相同规则评价 |
-| `plan.py` | 扩展实验计划，定义 `PLANS = {名称: (构建函数, "ext/<名称>")}` | 待建 |
+| `plan.py` | 扩展实验计划，定义 `PLANS`：`--plan ext_turn`（转弯代价 / 运动时间）、`--plan ext_noise`（噪声）；地图划分见 `mazes/splits/ext_dev.json`；规则见 `Docs/ext/experiment-plan.md` | 已建，计划待冻结 |
 
 ## 已实现的算法
 

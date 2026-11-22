@@ -49,3 +49,4 @@ zhouying682 2026-11-22 新增独立碰撞上限，接通环境、规则计价、
 Luca 2026-11-22 撞墙规则改写为正式规则层 src/ext/rules/collision.py（新维度 contact）：规则层新增 env_options() 钩子与 param_ranges，Ruleset 去掉专用的 collision_limit 字段，基础规则结果恢复不追加 actions / collisions；已知地图规划器不受观测层限制
 Luca 2026-11-22 完成 E2：噪声观测层 src/ext/rules/noisy_sensor.py（前 / 侧 / 后准确率，边界与接触反馈可靠，种子可复现，默认撞墙后继续）、置信度重规划 src/ext/algorithms/belief_astar.py（对数几率融合）及消融 belief_astar_naive；新增 test_noisy_sensor 与上位机测试；130 项测试通过
 Luca 2026-11-22 Docs/ext/dev-plan.md 新增“进度看板”（状态、负责人、下一步顺序、已做决定、待核查问题），README 进度行指向它
+Luca 2026-11-22 扩展实验计划草稿 Docs/ext/experiment-plan.md（Q1～Q6、按来源分层划分、配对符号检验与分组一致的结论标准）；src/ext/plan.py 注册 --plan ext_turn / ext_noise，划分写入 mazes/splits/ext_dev.json；新增 test_plan
