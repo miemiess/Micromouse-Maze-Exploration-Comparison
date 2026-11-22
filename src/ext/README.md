@@ -10,7 +10,7 @@
 | `algorithms/` | 为扩展规则编写的算法，每个算法一个文件；自动发现扫描本目录。共用的搜索与已知墙在 `core/planning.py` | 已有 `rule_optimal.py`（已知地图上的规则最优参照）；E3 探索策略：`turn_aware_astar`、`turn_aware_astar_w2`、`dstar_lite`、`frontier`。后两项按步数选路，在代价叠加层中也可按相同规则评价 |
 | `difficulty.py` | D4：迷宫难度特征（环路、死胡同、分岔、绕路、转向）与基础结果的 Spearman 相关；模拟退火生成对抗迷宫。`python src/ext/difficulty.py features` / `adversarial --algorithm <名称>` | 已完成，结果在 `results/ext/difficulty/` |
 | `plan.py` | 扩展实验计划，定义 `PLANS`：`--plan ext_turn`（转弯代价 / 运动时间）、`--plan ext_noise`（噪声）、`--plan ext_two_phase`（两阶段）；地图划分见 `mazes/splits/ext_dev.json`；规则见 `Docs/ext/experiment-plan.md`；加 `--dry-run` 只预览设置与输出目录、不运行 | 已建，计划待冻结 |
-| `posthoc.py` | 事后验证（看过正式结果之后做的，不属于冻结计划）：`divisor` 用 X3 数据重算不同探索折算系数下的两阶段成绩（发现 12）；`contact` 去掉接触反馈并分解撞墙来源，检验置信度融合没有优势的原因（发现 11）。输出 `results/ext/posthoc/` | 已完成 · `tests/test_ext/test_posthoc.py` |
+| `posthoc.py` | 事后验证（看过正式结果之后做的，不属于冻结计划）：`soft` 在开发集上为 `belief_astar_soft` 选 K 并在噪声子集上评估；`divisor` 用 X3 数据重算不同探索折算系数下的两阶段成绩（发现 12）；`contact` 去掉接触反馈并分解撞墙来源，检验置信度融合没有优势的原因（发现 11）。输出 `results/ext/posthoc/` | 已完成 · `tests/test_ext/test_posthoc.py` |
 
 ## 已实现的算法
 
@@ -23,10 +23,11 @@
 | [dstar_lite](algorithms/dstar_lite.py) | 在乐观地图上维护到目标的单位步长距离。发现新墙后，从被阻断边的端点开始修复距离，再沿当前最短路走一步。 | 增量修复与重复 A* 全量重算的计算耗时如何？平局时两者可能选不同路线。 |
 | [frontier](algorithms/frontier.py) | 从当前位置用 BFS 沿确认通路寻找最近的未访问格。同距离的候选中优先选目标格。 | 逐步扩大已探索区域，与直接朝目标乐观规划相比，覆盖率、重复访问和到达步数有何差异？ |
 | [belief_astar](algorithms/belief_astar.py) | 噪声观测下用对数几率融合多次读数判断墙（撞到的墙、走过的边为确定），在乐观地图上按规则代价做朝向 A*；消融 `belief_astar_naive` 只信最近一次读数。唯一声明支持 `noisy_sensor` 的探索算法。 | 累积证据比只信最近读数能少撞几次墙、少走多少步？准确率下降时如何变化？ |
+| [belief_astar_soft](algorithms/belief_astar.py) | 冻结计划之后新增的改进（报告发现 11）：与 `belief_astar` 相同，但找不到路时的兜底规划不再无视全部读数，而是给“更可能有墙”的边加代价 K · e^S（K = 0.25，开发集选定）。噪声子集上撞墙减少 20%～68%，步数相当（`results/ext/posthoc/soft.md`） | `tests/test_ext/test_noisy_sensor.py` |
 | [bounded_explore_e0 / e10 / e25](algorithms/bounded_explore.py) | 两阶段比赛（D5）：先像朝向 A* 一样到达目标，再继续探索乐观最优路线上没到过的格子，直到“只走已确认通路的冲刺代价 P ≤ (1 + ε) × 乐观下界 O”时停止。由于 O ≤ 真实最优 ≤ P，停止时冲刺代价可证明不超过 (1 + ε) 倍最优。 | 多探索换更好的冲刺值不值？成绩随 ε 如何变化？与“到达即停”相比如何？ |
 | [rule_optimal](algorithms/rule_optimal.py) | 读取完整地图，按同一规则计算从起点到目标的最小代价。 | 给出 `optimal_rule_cost`，用于计算实际探索代价与已知地图最优代价之比。 |
 
-**算法下拉框分组。** 上位机按“基础算法”和“扩展算法”列出可选项。启用转弯代价或运动时间后，两种朝向 A* 会移到“为当前规则设计”组；启用噪声观测后，只有 `belief_astar`（及其消融）可选，其余探索算法置灰。D* Lite 和最近前沿仍按格数选路，运行器会按所选规则给它们的实际轨迹计价。各策略的整体性能排名有待正式对照实验。
+**算法下拉框分组。** 上位机按“基础算法”和“扩展算法”列出可选项。启用转弯代价或运动时间后，两种朝向 A* 会移到“为当前规则设计”组；启用噪声观测后，只有 `belief_astar` 及其变体（消融 `belief_astar_naive`、改进 `belief_astar_soft`）可选，其余探索算法置灰。D* Lite 和最近前沿仍按格数选路，运行器会按所选规则给它们的实际轨迹计价。各策略的整体性能排名有待正式对照实验。
 
 **可复核的样例。** 在仓库根目录运行以下命令，在「已知地图规划」页选择 `rule_optimal`。这张图有“6 步、5 次直角转向”和“8 步、3 次直角转向”两条路线。λ = 2 时，较长路线的代价为 14，短路线为 16；把 λ 调到 1，两条路线的代价均为 11。
 

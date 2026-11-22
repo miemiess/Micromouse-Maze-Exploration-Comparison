@@ -11,7 +11,7 @@ Computational Thinking for AI 小组项目（Track A：自主机器人导航与�
 | 阶段 | 状态 | 入口 |
 | --- | --- | --- |
 | **基础规则**（16×16、每步代价 1、理想观测） | ✅ 已完成并冻结，标签 `basic-rules-v1` | 代码 [`src/basic/`](src/basic/README.md) · 结果 [`results/basic/`](results/README.md) · 文档 [`Docs/basic/`](Docs/README.md) |
-| **扩展规则**（转弯代价、两阶段、噪声；启发式与近似算法） | 🟡 E0～E3、D4、D5 与撞墙处理已实现；[实验计划](Docs/ext/experiment-plan.md)已冻结，[X1～X3 正式结果与分析](results/ext/README.md)已完成并写入报告第 3 章 | **[进度看板与路线图](Docs/ext/dev-plan.md#0-进度看板)** · [扩展算法](src/ext/README.md#已实现的算法) |
+| **扩展规则**（转弯代价、两阶段、噪声；启发式与近似算法） | ✅ 已完成：E0～E3、D4、D5 与撞墙处理；按冻结的[实验计划](Docs/ext/experiment-plan.md)完成 X1～X4，[结果与分析](results/ext/README.md)已写入报告第 3 章 | **[进度看板与路线图](Docs/ext/dev-plan.md#0-进度看板)** · [扩展算法](src/ext/README.md#已实现的算法) |
 | **最终报告** | 🟡 中文初稿（含扩展结果），英文定稿、参考文献核查、贡献记录待完成 | [`Docs/Result.md`](Docs/Result.md) |
 
 **基础阶段的主要结论**（详见报告第 2、4 章）：
@@ -19,6 +19,12 @@ Computational Thinking for AI 小组项目（Track A：自主机器人导航与�
 - 基础规则下推荐 **重复 A***：514/514 张地图全部到达，步数 / 最短路均值 2.17；与 Flood-Fill 步数相近，报告表 2 四类地图的计算时间中位数约为其 1/15～1/21。
 - 迷宫结构决定算法优劣：沿墙法在有环路的迷宫上大多失败（144/514）；只用一种迷宫生成器得到的结论可能完全不成立。
 - 本组新方案“先验增强重复 A*”只降低了最坏情况，整体不优于重复 A*。原因是开发集只含生成图，出现了分布偏移；按地图来源分层的事后分析证实了这一点。
+
+**扩展阶段的主要结论**（详见报告第 3 章）：
+
+- 规则更接近真实比赛后（转弯代价、运动时间、传感器噪声、两阶段比赛），**乐观重规划仍然最好**；按转弯代价规划、D* Lite 增量修复、置信度融合都没有显著收益，加权 A*（w = 2）显著减少搜索量而代价不变。
+- 两阶段比赛中，“证明找到最短路再冲刺”在外部迷宫库上显著优于“到达即停”。本组提出的误差有界提前停止（ε）满足冲刺 ≤ (1 + ε) 倍最优；ε 的最佳取值取决于计分中探索的折算系数。
+- 噪声下，置信度融合的收益被“无视全部读数”的兜底规划抵消；改为按置信度加代价后（`belief_astar_soft`，冻结后新增），撞墙减少 20%～68%，步数不变。
 
 ## 快速开始
 
@@ -94,7 +100,7 @@ mazes/                     地图：classic/ 下全部地图（外部迷宫库 e
 | D2 | 实验框架与正式实验（6682 + 30 次运行） | `src/core/experiments.py`、`src/basic/plan.py`；`results/basic/` | mmy / 已完成 |
 | D3 | 演示与运行说明 | [`Docs/basic/demo-guide.md`](Docs/basic/demo-guide.md)；`results/basic/demo/` | mmy / 已完成 |
 
-### 扩展阶段（待认领，详见 [`Docs/ext/dev-plan.md`](Docs/ext/dev-plan.md) 第 4 节）
+### 扩展阶段（已完成，详见 [`Docs/ext/dev-plan.md`](Docs/ext/dev-plan.md) 第 0 节）
 
 | 编号 | 阶段 | 内容 | 依赖 | 负责人 / 状态 |
 | --- | --- | --- | --- | --- |
@@ -102,7 +108,7 @@ mazes/                     地图：classic/ 下全部地图（外部迷宫库 e
 | E1 | 1 | 运动时间模型与转弯代价规则（参数来源要记录）；规则最优参照 `rule_optimal` | E0 | 已完成 · [`src/ext/rules/`](src/ext/rules/) · [测试](tests/test_ext/test_turn_cost.py) |
 | E3 | 1 | [朝向 A* 与加权变体](src/ext/algorithms/turn_aware_astar.py) · [测试](tests/test_ext/test_turn_aware_astar.py)；[D* Lite](src/ext/algorithms/dstar_lite.py) · [最近前沿探索](src/ext/algorithms/frontier.py) · [测试](tests/test_ext/test_incremental_frontier.py) | E0；转弯加权依赖 E1 | zhouying682 / 四个策略开发完成，E3-1 已验收；X1 已完成 |
 | D5 | 2 | 两阶段规则与 ε 提前停止：[两阶段规则层](src/ext/rules/two_phase.py) · [有界提前停止](src/ext/algorithms/bounded_explore.py) · [测试](tests/test_ext/test_two_phase.py) | E0 | Luca / 已完成；X3 已完成 |
-| E2 | 3 | 传感器噪声与置信度融合：[噪声观测层](src/ext/rules/noisy_sensor.py) · [撞墙处理层](src/ext/rules/collision.py) · [置信度重规划](src/ext/algorithms/belief_astar.py) · [测试](tests/test_ext/test_noisy_sensor.py) | E0 | Luca、zhouying682 / 已完成；X2 已完成 |
+| E2 | 3 | 传感器噪声与置信度融合：[噪声观测层](src/ext/rules/noisy_sensor.py) · [撞墙处理层](src/ext/rules/collision.py) · [置信度重规划](src/ext/algorithms/belief_astar.py)（含改进 `belief_astar_soft`） · [测试](tests/test_ext/test_noisy_sensor.py) | E0 | Luca、zhouying682 / 已完成；X2 已完成 |
 | D4 | 可选 | 迷宫难度刻画与对抗式生成最坏迷宫：[`src/ext/difficulty.py`](src/ext/difficulty.py) · [结果](results/ext/difficulty/) · [测试](tests/test_ext/test_difficulty.py) | 无 | Luca / 已完成 |
 | 全员 | 收尾 | ~~报告第 3 章扩展结果~~（已完成）、英文定稿、参考文献核查、贡献记录、在干净提交上重跑全部实验 | 各模块结果 | 全员 / 未开始 |
 
@@ -115,7 +121,7 @@ mazes/                     地图：classic/ 下全部地图（外部迷宫库 e
 | 问题定义、计算模型 | 报告第 1 章；`src/README.md`；`src/core/environment.py` |
 | 算法设计与选择理由 | 报告 2.1、2.6、第 4 章；`Docs/basic/algorithm-methods.md`、`algorithm-design.md` |
 | 复杂度分析 | 报告 2.2、4.2；算法登记表 |
-| 启发式 / 近似算法 | 基础：新方案与消融（第 4 章）；扩展：加权 A*（w = 2）、ε 有界提前停止，结果见报告 3.7～3.9 |
+| 启发式 / 近似算法 | 基础：新方案与消融（第 4 章）；扩展：加权 A*（w = 2）、ε 有界提前停止、按置信度加代价的兜底规划，结果见报告 3.7～3.9 |
 | Python 概念验证 | `src/`、`tools/MazesTest/` |
 | 实验评价 | `Docs/basic/experiment-plan.md`；`results/basic/`；扩展：`results/ext/` |
 | 局限与改进 | 报告 2.7、3.10、第 5 章 |

@@ -147,5 +147,45 @@ class BeliefAStarTests(unittest.TestCase):
                 self.assertEqual(a["path"], b["path"])
 
 
+class SoftFallbackTests(unittest.TestCase):
+    """belief_astar_soft：兜底规划按置信度给可疑的边加代价（冻结计划之后新增的改进）。"""
+
+    @staticmethod
+    def corridor_algo(name, scores):
+        """3×1 走廊外加一条绕行：(0,0)→(1,0)→(2,0) 是直路，(0,0)→(0,1)→(1,1)→(2,1)→(2,0) 是绕路。"""
+        algo = load_algorithm(name)
+        algo.configure(Ruleset((NoisySensorLayer(p_front=0.9, p_side=0.9, p_back=0.9),)))
+        algo.reset(width=3, height=2, start=(0, 0), goals=frozenset({(2, 0)}), initial_heading=D.EAST)
+        algo.score.update(scores)
+        return algo
+
+    def test_fallback_avoids_suspicious_edges_by_confidence(self):
+        """直路上有一条很可能是墙的边、绕路上有一条稍可疑的边：
+        原算法兜底时无视读数走直路；改进版绕开置信度高的那条。"""
+        e = lambda a, b: frozenset((a, b))  # noqa: E731
+        scores = {e((1, 0), (2, 0)): 6.0, e((1, 1), (2, 1)): 0.5,
+                  e((0, 0), (0, 1)): 0.5, e((1, 0), (1, 1)): math.inf}   # 两条路都被“更可能有墙”堵住 → 兜底
+        obs = Observation((0, 0), D.EAST, frozenset(), 0)
+        plain = self.corridor_algo("belief_astar", scores)
+        soft = self.corridor_algo("belief_astar_soft", scores)
+        self.assertEqual(plain.choose_direction(obs), D.EAST)
+        self.assertEqual(soft.choose_direction(obs), D.NORTH)
+        self.assertEqual((plain.fallbacks, soft.fallbacks), (1, 1))
+
+    def test_same_as_original_without_fallback_and_reaches_goal(self):
+        """理想观测下从不兜底，与原算法路线相同；默认噪声下固定地图全部到达。"""
+        maze = Maze.from_json(MAPS[0])
+        a = run_episode(maze, load_algorithm("belief_astar"))
+        b = run_episode(maze, load_algorithm("belief_astar_soft"))
+        self.assertEqual(a["path"], b["path"])
+        rule = parse_rule("noisy_sensor:p_front=0.8,p_side=0.7,p_back=0.6")
+        for path in MAPS:
+            for seed in range(2):
+                with self.subTest(maze=path.stem, seed=seed):
+                    result = run_episode(Maze.from_json(path), load_algorithm("belief_astar_soft"),
+                                         seed=seed, rule=rule)
+                    self.assertEqual(result["status"], "success")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -18,9 +18,15 @@ contact —— 发现 11：噪声下置信度融合为何没有优势。
     只用种子 0。不设计算时间上限（30 秒上限在多进程并行时取决于机器负载，结果不可复现），
     每局由动作预算（20 × 格子数）结束。
 
+soft —— 发现 11 的改进：belief_astar_soft（兜底规划按置信度给可疑的边加代价 K · e^S）。
+    K 在开发集（mazes/splits/ext_dev.json 的 199 张地图，三档噪声 × 种子 0～4）上按“步数 / 最短路”均值选定，
+    相差不到 0.001 取较小的 K；之后冻结，在 X2 的噪声子集（200 张 × 种子 0～4）上与 belief_astar、
+    belief_astar_naive 配对比较（后两者直接读取 X2 的 runs.csv）。
+
 运行（项目根目录）：
     python src/ext/posthoc.py divisor     → results/ext/posthoc/divisor.md
     python src/ext/posthoc.py contact     → results/ext/posthoc/contact.md、contact_runs.csv
+    python src/ext/posthoc.py soft        → results/ext/posthoc/soft.md、soft_runs.csv
 """
 
 import argparse
@@ -278,16 +284,115 @@ def contact_report(workers: int, variants=None) -> Path:
     return path
 
 
+# --------------------------------------------------------------------------- soft
+SOFT_CANDIDATES = (0.25, 0.5, 1.0, 2.0, 4.0)
+
+
+def _soft_job(args):
+    level, maze_id, seed, scale = args
+    from basic.algorithms.bfs import BfsPlanner
+    from core.algorithm_api import Runner, run_episode
+    from core.environment import Maze
+    from core.rules import parse_rule
+    from ext.algorithms.belief_astar import BeliefAStarSoft
+    maze = Maze.from_json(ROOT / "mazes" / "classic" / f"{maze_id}.json")
+    algo = type("Soft", (BeliefAStarSoft,), {"penalty_scale": scale})()
+    runner = Runner(maze, algo, seed=seed, time_budget=float("inf"), rule=parse_rule(LEVELS[level]))
+    runner.run()
+    s = runner.summary()
+    shortest = run_episode(maze, BfsPlanner())["steps"]
+    return {"experiment": level, "maze_id": maze_id, "seed": str(seed), "algorithm": f"soft_{scale:g}",
+            "status": s["status"], "steps": s["steps"], "shortest": shortest, "ratio": s["steps"] / shortest,
+            "collisions": s.get("collisions", 0), "fallback_plans": algo.fallbacks, "replans": algo.replans}
+
+
+def _run_pool(jobs, workers, fn):
+    rows = []
+    with ProcessPoolExecutor(workers) as pool:
+        for i, row in enumerate(pool.map(fn, jobs, chunksize=4), 1):
+            rows.append(row)
+            if i % 500 == 0 or i == len(jobs):
+                print(f"{i}/{len(jobs)}", flush=True)
+    return rows
+
+
+def soft_report(workers: int) -> Path:
+    from ext.algorithms.belief_astar import BeliefAStarSoft
+    from ext.plan import split
+    parts = split()
+    dev_rows = _run_pool([(lv, m, s, k) for lv in LEVELS for m in parts["dev"] for s in SEEDS
+                          for k in SOFT_CANDIDATES], workers, _soft_job)
+    lines = ["# 改进：按置信度加代价的兜底规划（belief_astar_soft）", "",
+             "> **冻结计划之后新增的算法**（报告发现 11 提出的改进），不属于正式结论。K 只在开发集上选定，"
+             "测试集只评估一次。由 `python src/ext/posthoc.py soft` 生成。", "",
+             f"## 开发集选 K（{len(parts['dev'])} 张地图 × 三档噪声 × 种子 0～4；步数 / 最短路均值，撞墙为每局均值）", "",
+             "| K | 成功率 | 步数 / 最短路 | 撞墙 | 高 | 中 | 低 |", "| --- | --- | --- | --- | --- | --- | --- |"]
+    scores = []
+    for k in SOFT_CANDIDATES:
+        sub = [r for r in dev_rows if r["algorithm"] == f"soft_{k:g}"]
+        ok = [r for r in sub if r["status"] == "success"]
+        mean = statistics.mean(r["ratio"] for r in ok)
+        scores.append((round(mean, 3), k))
+        per = [statistics.mean(r["ratio"] for r in ok if r["experiment"] == lv) for lv in LEVELS]
+        lines.append(f"| {k:g} | {len(ok) / len(sub):.1%} | {mean:.3f} | "
+                     f"{statistics.mean(r['collisions'] for r in sub):.1f} | " + " | ".join(f"{x:.3f}" for x in per) + " |")
+    chosen = min(scores)[1]
+    lines += ["", f"选定 K = {chosen:g}（`BeliefAStarSoft.penalty_scale` = {BeliefAStarSoft.penalty_scale:g}）。", ""]
+    if chosen != BeliefAStarSoft.penalty_scale:
+        lines += [f"**注意：类属性与开发集选定值不一致，应把 penalty_scale 改为 {chosen:g} 后重跑。**", ""]
+
+    test_rows = _run_pool([(lv, m, s, chosen) for lv in LEVELS for m in parts["noise"] for s in SEEDS],
+                          workers, _soft_job)
+    for r in test_rows:
+        r["algorithm"] = "belief_astar_soft"
+    OUT.mkdir(parents=True, exist_ok=True)
+    with (OUT / "soft_runs.csv").open("w", encoding="utf-8", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=list(dev_rows[0]) + ["split"])
+        writer.writeheader()
+        writer.writerows([dict(r, split="dev") for r in dev_rows] + [dict(r, split="test") for r in test_rows])
+
+    lines += ["## 测试集（X2 的噪声子集 200 张 × 种子 0～4）", "",
+              "| 噪声 | 算法 | 成功率 | 步数 / 最短路 | 撞墙 |", "| --- | --- | --- | --- | --- |"]
+    compare = ["", "### 配对比较（belief_astar_soft vs 对照，按（地图, 种子）配对，前者更小记胜）", "",
+               "| 噪声 | 对照 | 指标 | 全部 | 外部迷宫库 | 生成图 | 结论 |", "| --- | --- | --- | --- | --- | --- | --- |"]
+    for level in LEVELS:
+        x2 = [r for r in load(RESULTS / "noise" / level / "runs.csv")]
+        mine = [dict(r, steps=str(r["steps"]), ratio=str(r["ratio"]), collisions=str(r["collisions"]))
+                for r in test_rows if r["experiment"] == level]
+        rows = x2 + mine
+        for alg in ("belief_astar", "belief_astar_naive", "belief_astar_soft"):
+            sub = [r for r in rows if r["algorithm"] == alg]
+            ok = [r for r in sub if r["status"] == "success"]
+            lines.append(f"| {level} | {alg} | {len(ok) / len(sub):.1%} | "
+                         f"{statistics.mean(float(r['ratio']) for r in ok):.3f} | "
+                         f"{statistics.mean(float(r['collisions']) for r in sub):.1f} |")
+        for base in ("belief_astar", "belief_astar_naive"):
+            for metric, name in (("ratio", "步数比"), ("collisions", "撞墙")):
+                res = paired(rows, "belief_astar_soft", base, metric)
+                compare.append(f"| {level} | {base} | {name} | {fmt(res['ALL'])} | {fmt(res['external'])} | "
+                               f"{fmt(res['generated'])} | {verdict(res)} |")
+    path = OUT / "soft.md"
+    path.write_text("\n".join(lines + compare) + "\n", encoding="utf-8")
+    return path
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("divisor")
+    s = sub.add_parser("soft")
+    s.add_argument("--workers", type=int, default=max(1, (os.cpu_count() or 2) - 2))
     c = sub.add_parser("contact")
     c.add_argument("--workers", type=int, default=max(1, (os.cpu_count() or 2) - 2))
     c.add_argument("--variants", nargs="*", choices=list(VARIANTS),
                    help="只重跑这些变体，其余沿用 contact_runs.csv 中已有的记录")
     args = parser.parse_args(argv)
-    print(divisor_report() if args.command == "divisor" else contact_report(args.workers, args.variants))
+    if args.command == "divisor":
+        print(divisor_report())
+    elif args.command == "soft":
+        print(soft_report(args.workers))
+    else:
+        print(contact_report(args.workers, args.variants))
 
 
 if __name__ == "__main__":

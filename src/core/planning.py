@@ -162,11 +162,12 @@ class SearchResult:
 
 
 Heuristic = Callable[[Cell, Direction], float]
+EdgePenalty = Callable[[Cell, Direction], float]
 
 
 def heading_search(start: Cell, heading: Direction, goals: Iterable[Cell], blocked: Blocked,
                    cost: CostModel, *, heuristic: Heuristic | None = None,
-                   weight: float = 1.0) -> SearchResult:
+                   weight: float = 1.0, edge_penalty: EdgePenalty | None = None) -> SearchResult:
     """在（格子, 朝向）上搜索代价最小的路线。
 
     Args:
@@ -178,6 +179,8 @@ def heading_search(start: Cell, heading: Direction, goals: Iterable[Cell], block
         heuristic: (格子, 朝向) → 剩余代价估计；None 时为 Dijkstra。
             例如 lambda c, h: cost_lower_bound(cost, c, h, goals)。
         weight: 加权 A* 的 w（f = g + w·h）；w = 1 且启发式不高估时结果最优，w > 1 时代价 ≤ w 倍最优。
+        edge_penalty: (格子, 方向) → 穿过这条边的额外代价（≥ 0，例如按“有墙”的置信度加价）；
+            None 时没有额外代价。额外代价非负，因此规则代价的下界仍是可采纳的启发式。
 
     边：原地转 1 或 2 个 90°（代价 turn_cost），或沿当前朝向直走 k 格（代价 run_cost(k)，中途不能穿墙）。
     同代价时按入堆先后出堆，结果确定（无随机性）。
@@ -203,11 +206,13 @@ def heading_search(start: Cell, heading: Direction, goals: Iterable[Cell], block
             return SearchResult(round(g, 6), route, facing, expanded)
         moves = [((cell, other), cost.turn_cost(q), [])
                  for other in ORDER if (q := quarter_turns(facing, other))]
-        here, run = cell, []
+        here, run, extra = cell, [], 0.0
         while not blocked(here, facing):
+            if edge_penalty is not None:
+                extra += edge_penalty(here, facing)
             run.append(here)
             here = step(here, facing)
-            moves.append(((here, facing), cost.run_cost(len(run)), list(run)))
+            moves.append(((here, facing), cost.run_cost(len(run)) + extra, list(run)))
             if here in goals:
                 break
         for nxt, edge_cost, cells in moves:

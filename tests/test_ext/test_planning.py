@@ -103,6 +103,25 @@ class HeadingSearchTests(unittest.TestCase):
                     for b in range(1, 17 - a):
                         self.assertLessEqual(layer.run_cost(a + b), layer.run_cost(a) + layer.run_cost(b) + 1e-12)
 
+    def test_edge_penalty(self):
+        """edge_penalty 为 0 时结果不变；给直路加价后改走等长的另一条路，代价含额外部分。"""
+        maze = Maze({"maze_id": "square", "width": 2, "height": 2, "start": [0, 0], "start_heading": "N",
+                     "goals": [[1, 1]], "blocked_edges": []})
+        blocked = maze_blocked(maze.width, maze.height, maze.walls)
+        cost = BASIC.cost_model
+        base = heading_search((0, 0), Direction.NORTH, [(1, 1)], blocked, cost)
+        zero = heading_search((0, 0), Direction.NORTH, [(1, 1)], blocked, cost, edge_penalty=lambda c, d: 0.0)
+        self.assertEqual((base.route, base.cost), (zero.route, zero.cost))
+        self.assertEqual(base.route[1], (0, 1))
+        north = lambda c, d: 5.0 if (c, d) == ((0, 0), Direction.NORTH) else 0.0  # noqa: E731
+        avoid = heading_search((0, 0), Direction.NORTH, [(1, 1)], blocked, cost, edge_penalty=north)
+        self.assertEqual((avoid.route, avoid.cost), ([(0, 0), (1, 0), (1, 1)], 2))
+        line = Maze({"maze_id": "line", "width": 1, "height": 2, "start": [0, 0], "start_heading": "N",
+                     "goals": [[0, 1]], "blocked_edges": []})     # 只有一条路：穿过加价的边
+        forced = heading_search((0, 0), Direction.NORTH, [(0, 1)], maze_blocked(line.width, line.height, line.walls), cost,
+                                edge_penalty=north)
+        self.assertEqual(forced.cost, 6)
+
     def test_unreachable(self):
         maze = Maze.from_json(MAPS[0])
         result = heading_search(maze.start, maze.start_heading, maze.goals, lambda c, d: True, BASIC.cost_model)
