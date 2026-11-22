@@ -160,7 +160,9 @@ class MainWindow(QMainWindow):
             self.rule_panel.set_rule(rule)
             return True
         run_tabs = (self.run_tab, self.compare_tab, self.known_tab)
-        timers = [tab.controller.timer for tab in run_tabs] + [self.batch_tab.timer]
+        # 正式计划使用计划自带的规则，切换规则不影响正在运行的计划
+        timers = [tab.controller.timer for tab in run_tabs] \
+            + ([self.batch_tab.timer] if self.batch_tab.follows_rule_panel else [])
         active = [timer for timer in timers if timer.isActive()]
         partial = any(r.snapshot().decision and not r.finished
                       for tab in run_tabs for r in tab.controller.runners)
@@ -175,7 +177,8 @@ class MainWindow(QMainWindow):
             if answer != QMessageBox.Yes:
                 self.rule_panel.set_rule(self.rule)
                 return False
-            self.batch_tab.stop()
+            if self.batch_tab.follows_rule_panel:
+                self.batch_tab.stop()
         self.rule = rule
         self.rule_panel.set_rule(rule)
         for tab in (*run_tabs, self.batch_tab):
@@ -404,7 +407,15 @@ class MainWindow(QMainWindow):
         return answer == QMessageBox.Discard
 
     def closeEvent(self, event) -> None:
-        """关闭窗口前处理未保存的修改。"""
+        """关闭窗口前：批量实验正在运行时确认（正式计划未完成的子实验不会写入），再处理未保存的修改。"""
+        if self.batch_tab.running:
+            answer = QMessageBox.question(
+                self, "批量实验正在运行",
+                "关闭窗口会中断正在运行的实验：已完成的子实验已经导出，未完成的部分不会写入正式结果。仍要关闭吗？")
+            if answer != QMessageBox.Yes:
+                event.ignore()
+                return
+            self.batch_tab.stop()
         if self.confirm_discard():
             event.accept()
         else:

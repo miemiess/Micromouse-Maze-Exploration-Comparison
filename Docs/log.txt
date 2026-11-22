@@ -56,3 +56,4 @@ Luca 2026-11-22 完成 D5：两阶段比赛规则层 src/ext/rules/two_phase.py�
 Luca 2026-11-22 合并 zhouying682 的计划接入：保留 --dry-run、碰撞统计列等通用改进，计划与划分以本地版本为准
 Luca 2026-11-22 完成 D4：src/ext/difficulty.py（难度特征、与基础实验 1 的 Spearman 相关、模拟退火对抗迷宫），结果写入 results/ext/difficulty/；实验计划新增 Q8 / X4（描述性）
 Luca 2026-11-22 扩展实验计划 Docs/ext/experiment-plan.md 经确认冻结（冻结提交即本条日志所在提交），之后依次运行 X1～X3
+Luca 2026-11-22 上位机批量实验页合并正式实验：“实验来源”可选自选实验或任一已注册计划（basic、ext_turn、ext_noise、ext_two_phase），计划模式表单只读、按子实验依次运行并导出到正式结果目录、中途停止不写入未完成的子实验；去掉单独的“正式实验”进度页及其在 core 中的进度文件与进程锁

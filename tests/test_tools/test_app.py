@@ -294,6 +294,57 @@ class AppTests(unittest.TestCase):
         self.assertFalse(tab.open_button.isEnabled())
         self.assertTrue((out / "runs.csv").is_file())
 
+    def test_batch_tab_runs_formal_plans(self):
+        """批量实验页的“正式计划”来源：表单只读显示计划；按子实验依次运行并导出到计划目录；
+        中途停止不写入未完成的子实验；切换规则不影响计划；切回自选实验恢复可编辑。"""
+        from core.experiments import ExperimentRun
+        from core.rules import parse_rule
+        fixture = ROOT / "tests" / "test_ext" / "fixtures" / "turn_cost_tradeoff.json"
+
+        def build():
+            """（测试用）两个子实验的小计划。"""
+            return [ExperimentRun([fixture], ["dfs", "repeated_astar"], experiment=name, rule=parse_rule(spec))
+                    for name, spec in (("first", "turn_cost:weight=2"), ("second", "two_phase"))]
+
+        tab = self.window.batch_tab
+        tab.results_root = Path(self.tmp.name) / "results"
+        tab.plans["tiny"] = (build, "ext/tiny")
+        tab.source.addItem("正式计划 --plan tiny", "tiny")
+        tab.source.setCurrentIndex(tab.source.findData("tiny"))
+        self.assertFalse(tab.follows_rule_panel)
+        self.assertFalse(tab.maps.isEnabled())
+        self.assertFalse(tab.settings_box.isEnabled())
+        self.assertIn("first", tab.plan_info.text())
+        self.assertIn("计划自带的规则", tab.rule_label.text())
+
+        # 中途停止：第一个子实验完成后停止，第二个不写入
+        self.assertTrue(tab.start(confirm=False))
+        tab.timer.stop()
+        while tab.queue_index == 0:
+            tab._advance(deadline=None)
+        tab.timer.start(0)
+        tab.stop()
+        base = tab.results_root / "ext" / "tiny"
+        self.assertTrue((base / "first" / "runs.csv").is_file())
+        self.assertFalse((base / "second").exists())
+        self.assertIn("未完成的子实验没有写入", tab.status.text())
+
+        # 完整运行；切换规则不影响计划
+        self.assertTrue(tab.start(confirm=False))
+        self.window.select_rule("turn_cost")
+        self.assertTrue(tab.running)
+        tab.run_to_end()
+        self.assertTrue((base / "second" / "runs.csv").is_file())
+        self.assertIn("完成", tab.status.text())
+        self.assertIn("✓ 2 条", tab.plan_info.text())
+        self.assertEqual(tab.progress.value(), tab.progress.maximum())
+
+        tab.source.setCurrentIndex(0)
+        self.assertTrue(tab.follows_rule_panel)
+        self.assertTrue(tab.maps.isEnabled())
+        self.assertIn("转弯代价", tab.rule_label.text())
+        self.window.select_rule("basic")
+
     def test_generate_replaces_document(self):
         """随机生成会替换当前地图并出现在地图下拉框中。"""
         editor = self.window.editor_tab
