@@ -1,7 +1,7 @@
 """E3-1 验收测试：懂规则的重复 A*（turn_aware_astar / turn_aware_astar_w2）。
 
-任务说明见 Docs/ext/tasks/E3-1-turn-aware-astar.md。算法文件建立之前，本文件的测试全部跳过；
-建立之后自动生效。不要为了通过测试修改本文件——有疑问在任务说明的“问题记录”里写明，交给负责人决定。
+E3-1 已验收（实现 src/ext/algorithms/turn_aware_astar.py，zhouying682）。修改算法时这些测试必须继续通过，
+不要为了通过测试修改本文件。
 """
 
 import importlib.util
@@ -36,7 +36,7 @@ def cost_of(result: dict) -> float:
     return result.get("rule_cost", result["steps"])
 
 
-@unittest.skipUnless(AVAILABLE, "E3-1 尚未实现：见 Docs/ext/tasks/E3-1-turn-aware-astar.md")
+@unittest.skipUnless(AVAILABLE, "缺少 src/ext/algorithms/turn_aware_astar.py")
 class TurnAwareAStarAcceptance(unittest.TestCase):
     def setUp(self):
         self.infos = discover_algorithms(layer="ext")[0]

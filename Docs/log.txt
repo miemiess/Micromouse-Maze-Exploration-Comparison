@@ -39,3 +39,4 @@ Luca 2026-11-22 上位机规则面板：规则栈标签（基础规则 ＋ 彩�
 Luca 2026-11-22 为 E3 整理结构：新增 src/core/planning.py（KnownWalls、（格子, 朝向）Dijkstra / A* / 加权 A* 搜索、曼哈顿 + 转弯下界启发式），Ruleset.optimal_plan 改用它；算法类属性 designed_for（上位机加粗标记、metadata 分组）；探索算法的 stats() 并入运行统计；新增 test_planning（启发式不高估、A* 与 Dijkstra 同代价、扩展算法接入检查）；ext README 补懂规则算法的写法
 Luca 2026-11-22 新增 AGENTS.md（AI 助手与组员共用的工作规则，CLAUDE.md、.github/copilot-instructions.md 指向它）；新增任务说明 Docs/ext/tasks/E3-1-turn-aware-astar.md 与验收测试 tests/test_ext/test_turn_aware_astar.py（算法文件建立前自动跳过）
 zhouying682 2026-11-22 完成 E3-1：新增按规则代价重复规划的 A* 与 w=2 变体，7 项专项及 113 项全量测试通过。
+Luca 2026-11-22 验收 E3-1（zhouying682）：代码审查通过，113 项测试全部通过、无跳过；删除已完成的任务说明，README、dev-plan 改为指向算法与测试
