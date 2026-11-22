@@ -239,7 +239,9 @@ def plot(turn_curves, noise_curves, two_curves) -> list[str]:
         for i, (a, values) in enumerate(sorted(turn_curves.items())):
             xs = [x for key, x in lambdas if values.get(key) is not None]
             ys = [values[key] for key, _ in lambdas if values.get(key) is not None]
-            ax.plot(xs, ys, marker="o", color=PALETTE[i % len(PALETTE)], label=a, linewidth=1.6)
+            style = "-" if i < len(PALETTE) else "--"          # 算法多于调色板颜色时，后面的用虚线区分
+            ax.plot(xs, ys, marker="o" if i < len(PALETTE) else "s", linestyle=style,
+                    color=PALETTE[i % len(PALETTE)], label=a, linewidth=1.6)
         ax.set_xscale("log", base=2)
         _style(ax, "Turn cost: mean rule cost / optimal vs lambda", "rule cost / optimal")
         ax.set_xlabel("lambda", color=INK)

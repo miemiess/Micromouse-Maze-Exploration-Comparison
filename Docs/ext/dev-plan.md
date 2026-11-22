@@ -8,7 +8,7 @@
 
 最后更新：2026-11-22。每完成一项（或改变计划）就更新本节。
 
-**一句话**：扩展规则的 4 个维度（代价、观测、撞墙处理、比赛流程）全部实现；扩展算法 10 个（含 D5 的有界提前停止）；D4 难度刻画与对抗迷宫已出结果；实验计划草稿与 `--plan` 注册已完成，**等计划确认后运行**——X1～X3 还没有正式结果。
+**一句话**：扩展规则的 4 个维度（代价、观测、撞墙处理、比赛流程）全部实现；扩展算法 10 个（含 D5 的有界提前停止）；D4 难度刻画与对抗迷宫已出结果；实验计划已冻结，X1～X3 正式结果与分析已完成（[`results/ext/README.md`](../../results/ext/README.md) 有结论摘要），**下一步是写报告**。
 
 | 项 | 内容 | 状态 | 负责 | 代码 / 测试 |
 | --- | --- | --- | --- | --- |
@@ -19,8 +19,8 @@
 | E2 | 噪声观测层 + 置信度（对数几率）重规划及“只信最近读数”消融 | ✅ 完成（传感器参数为假设，正式实验待做） | Luca | `src/ext/rules/noisy_sensor.py`、`src/ext/algorithms/belief_astar.py` · `test_noisy_sensor.py` |
 | 实验计划 | 扩展实验的问题、地图划分、算法、规则、指标、结论标准 | ✅ 已冻结（2026-11-22） | Luca | [`Docs/ext/experiment-plan.md`](experiment-plan.md) |
 | 计划落地 | `src/ext/plan.py`（`--plan ext_turn` / `ext_noise`）、分层划分 `mazes/splits/ext_dev.json` | ✅ 完成 | Luca | `src/ext/plan.py` · `tests/test_ext/test_plan.py` |
-| 分析脚本 | `src/ext/analysis.py`：配对胜负、符号检验、λ 曲线、噪声曲线 | ⬜ 未开始 | — | — |
-| 正式结果 | 运行并分析，写入报告第 3 章、4.6 节 | ⬜ 未开始 | — | `results/ext/` |
+| 分析脚本 | `src/ext/analysis.py`：配对胜负、符号检验、分组一致性、λ / 噪声 / ε 曲线 | ✅ 完成 | Luca | `src/ext/analysis.py` · `test_analysis.py` |
+| 正式结果 | X1～X3 运行与分析 | ✅ 完成；写入报告第 3 章、4.6 节待做 | Luca | `results/ext/`、`results/ext/analysis/report.md` |
 | D5 | 两阶段比赛（探索 + 返回 + 冲刺）与 ε 提前停止（近似算法，冲刺代价 ≤ (1 + ε) × 最优，已用测试验证） | ✅ 完成（正式实验 X3 待做；计分系数 1/30 来源待核查） | Luca | `src/ext/rules/two_phase.py`、`src/ext/algorithms/bounded_explore.py` · `test_two_phase.py` |
 | D4 | 迷宫难度特征与基础结果的相关（描述性）、模拟退火对抗迷宫 | ✅ 完成（结果：`results/ext/difficulty/`） | Luca | `src/ext/difficulty.py` · `test_difficulty.py` |
 | 收尾 | 运动 / 传感器参数来源核查、文献核查、英文定稿、贡献记录、干净提交上重跑全部实验 | ⬜ 未开始 | 全员 | `Docs/Result.md` |
@@ -28,8 +28,8 @@
 **下一步（按顺序）**
 
 1. ~~确认并冻结实验计划~~（已冻结，2026-11-22）。
-2. **写分析脚本** `src/ext/analysis.py`（配对胜负、符号检验、λ 曲线、噪声曲线；适合交给组员，配任务说明与验收测试）。
-3. **运行** `--plan ext_turn`（约 15 分钟）、`--plan ext_noise`（约 30 分钟）、`--plan ext_two_phase`（约 20 分钟），**分析并写报告**（含 D4 的描述性结果）。
+2. ~~写分析脚本~~、~~运行 X1～X3~~（已完成，2026-11-22）。
+3. **写报告**：把 `results/ext/README.md` 的结论摘要与 D4 描述性结果写入报告第 3 章、4.6 节，并更新摘要与局限。
 5. 收尾各项。
 
 **已做的决定**（不再讨论）

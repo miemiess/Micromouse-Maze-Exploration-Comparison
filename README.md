@@ -11,7 +11,7 @@ Computational Thinking for AI 小组项目（Track A：自主机器人导航与�
 | 阶段 | 状态 | 入口 |
 | --- | --- | --- |
 | **基础规则**（16×16、每步代价 1、理想观测） | ✅ 已完成并冻结，标签 `basic-rules-v1` | 代码 [`src/basic/`](src/basic/README.md) · 结果 [`results/basic/`](results/README.md) · 文档 [`Docs/basic/`](Docs/README.md) |
-| **扩展规则**（转弯代价、两阶段、噪声；启发式与近似算法） | 🟡 E0～E3、D4、D5 与撞墙处理已实现；[实验计划](Docs/ext/experiment-plan.md)草稿待确认，确认后运行 | **[进度看板与路线图](Docs/ext/dev-plan.md#0-进度看板)** · [扩展算法](src/ext/README.md#已实现的算法) |
+| **扩展规则**（转弯代价、两阶段、噪声；启发式与近似算法） | 🟡 E0～E3、D4、D5 与撞墙处理已实现；[实验计划](Docs/ext/experiment-plan.md)已冻结，[X1～X3 正式结果与分析](results/ext/README.md)已完成，报告待写 | **[进度看板与路线图](Docs/ext/dev-plan.md#0-进度看板)** · [扩展算法](src/ext/README.md#已实现的算法) |
 | **最终报告** | 🟡 中文初稿，扩展结果、英文定稿、贡献记录待完成 | [`Docs/Result.md`](Docs/Result.md) |
 
 **基础阶段的主要结论**（详见报告第 2、4 章）：
