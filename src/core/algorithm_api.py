@@ -392,7 +392,7 @@ class Runner:
             maze: 真值迷宫。探索算法拿不到它；已知地图规划器通过 plan(maze) 拿到。
             algorithm: 探索策略或已知地图规划器对象。
             seed: 传给探索策略的随机种子。
-            max_steps: 移动预算；None 时使用环境默认值 20 × 格子数。
+            max_steps: 动作预算（撞墙后继续时撞墙也计一次）；None 时使用环境默认值 20 × 格子数。
             time_budget: 算法累计计算时间上限（秒），超过记为 timeout。
         """
         self.maze = maze
@@ -405,7 +405,7 @@ class Runner:
         self.name = getattr(algorithm, "name", type(algorithm).__name__)
         if not rule.supports(algorithm):
             raise ValueError(f"{self.name} does not support rule {rule.key}")
-        self.env = rule.make_env(maze, max_steps)
+        self.env = rule.make_env(maze, max_steps, seed=seed)  # 种子也供噪声观测等规则层使用
         self.reset()
 
     # -- 状态 -------------------------------------------------------------
@@ -492,7 +492,7 @@ class Runner:
                 moved = result.moved
                 self._observation = result.observation
                 if result.collided and self.rule.collision_limit != 1:
-                    # 接触证据优先于外层传感器包装产生的噪声。
+                    # 接触是可靠证据：即使外层噪声观测漏报，撞到的方向也一定标为墙。
                     obs = result.observation
                     self._observation = ContactObservation(obs.position, obs.heading, obs.walls | {direction},
                                                            obs.step_count, direction)
@@ -529,13 +529,17 @@ class Runner:
         self._extra_stats = dict(stats()) if callable(stats) else {}
 
     def _record_walls(self, observation: Observation) -> frozenset[Edge]:
-        """把当前格观测到的内部墙加入已观测集合，返回其中新出现的墙。"""
+        """把当前格观测到的内部墙加入已观测集合，返回其中新出现的墙。
+
+        只记录真实存在的墙（噪声观测的误报不算），供界面显示“已被看到的真实墙”；
+        算法自己的判断（含误报）由 debug_view 的 known_walls 显示。
+        """
         new = set()
         for direction in observation.walls:
             neighbour = step_cell(observation.position, direction)
             if inside(neighbour, self.maze.width, self.maze.height):
                 wall = frozenset((observation.position, neighbour))
-                if wall not in self._observed:
+                if wall not in self._observed and wall in self.maze.walls:
                     new.add(wall)
         self._observed |= new
         return frozenset(new)

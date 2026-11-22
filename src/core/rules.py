@@ -3,8 +3,11 @@
 基础规则（BASIC）没有叠加层：每步代价 1、转向只计数、理想观测、到达目标即结束。
 扩展规则在基础规则上叠加“层”，每层属于一个维度，同一维度最多一层：
     - cost（代价模型）：如转弯代价、运动时间模型（src/ext/rules/turn_cost.py、motion_time.py）；
-    - observation（观测模型）：如传感器噪声（规划中，会改变观测，只对声明支持的算法开放）；
+    - observation（观测模型）：如传感器噪声（src/ext/rules/noisy_sensor.py，会改变观测，只对声明支持的算法开放）；
+    - contact（撞墙处理）：撞墙后是否继续、累计几次终止（src/ext/rules/collision.py）；
     - flow（比赛流程）：如两阶段探索 + 冲刺（规划中）。
+层通过两个钩子影响运行：env_options() 返回创建 MazeEnvironment 的关键字参数（按维度顺序合并，后者覆盖前者），
+wrap_env(env) 包装环境（观测层在这里加噪声）。
 具体的层写在 src/ext/rules/ 的模块里，模块中的 LAYERS 列表会被 available_layers() 自动发现，
 本模块不导入任何具体规则，因此基础规则不依赖扩展层。
 
@@ -27,7 +30,7 @@ from core.planning import DELTAS, heading_search, maze_blocked, quarter_turns
 
 SRC = Path(__file__).resolve().parents[1]
 LAYER_PACKAGE = "ext.rules"   # 自动发现叠加层的包：每个模块定义 LAYERS = [层类, ...]
-DIMENSIONS = {"cost": "代价模型", "observation": "观测模型", "flow": "比赛流程"}
+DIMENSIONS = {"cost": "代价模型", "observation": "观测模型", "contact": "撞墙处理", "flow": "比赛流程"}
 
 __all__ = ["DIMENSIONS", "RuleLayer", "CostLayer", "CostMeter", "Ruleset", "BASIC", "BASIC_COLOR",
            "quarter_turns", "segments", "turn_points", "available_layers", "parse_rule", "preset_rules"]
@@ -95,6 +98,9 @@ class RuleLayer:
     param_labels: ClassVar[dict[str, tuple[str, str]]] = {}
     # 界面标签里显示的参数（None 表示全部）；完整参数见 param_text(full=True)。
     label_params: ClassVar[tuple[str, ...] | None] = None
+    # 参数的取值范围（上位机输入框使用）：{字段名: (最小, 最大)}；未列出时为 0～100。
+    # 默认值为 inf 的字段在界面上用最小值表示“不限”。
+    param_ranges: ClassVar[dict[str, tuple[float, float]]] = {}
 
     def params(self) -> dict:
         """参数字典（写入 metadata）。"""
@@ -107,7 +113,8 @@ class RuleLayer:
             if not full and self.label_params is not None and f.name not in self.label_params:
                 continue
             name, unit = self.param_labels.get(f.name, (f.name, ""))
-            parts.append(f"{name} = {getattr(self, f.name):g}{unit}")
+            value = getattr(self, f.name)
+            parts.append(f"{name} = 不限" if value == float("inf") else f"{name} = {value:g}{unit}")
         return "，".join(parts)
 
     def label(self) -> str:
@@ -115,8 +122,15 @@ class RuleLayer:
         text = self.param_text()
         return f"{self.title}（{text}）" if text else self.title
 
+    def env_options(self) -> dict:
+        """创建 MazeEnvironment 时的关键字参数（如 collision_limit）；默认无。"""
+        return {}
+
     def wrap_env(self, env):
-        """改变环境行为的层在这里包装环境（观测、流程层使用）；默认不改。"""
+        """改变环境行为的层在这里包装环境（观测、流程层使用）；默认不改。
+
+        需要随机数的包装读取 env.seed（Runner 的种子，可能为 None），以保证可复现。
+        """
         return env
 
 
@@ -163,7 +177,10 @@ class CostMeter:
         self._run = 0           # 当前直线段的格数
 
     def add(self, move: Direction, *, moved: bool = True) -> None:
-        """记录一次沿 move 方向的移动（移动前若方向改变，先原地转向）。"""
+        """记录一次朝 move 方向的动作：先原地转向（方向改变时），moved 为真时再前进一格。
+
+        moved 为假表示撞墙（撞墙处理层允许继续时）：只计转向，并结束当前直线段。
+        """
         if moved and self._run and move == self.heading:
             self._run += 1
             return
@@ -185,11 +202,8 @@ class CostMeter:
 class Ruleset:
     """一套比赛规则：基础规则 + 叠加层（每个维度最多一层）。不可变，可比较、可哈希。"""
     layers: tuple[RuleLayer, ...] = ()
-    collision_limit: int | None = 1  # None 表示不限次数
 
     def __post_init__(self):
-        if self.collision_limit is not None and (type(self.collision_limit) is not int or self.collision_limit < 1):
-            raise ValueError("collision limit must be a positive integer or unlimited")
         dims = [layer.dimension for layer in self.layers]
         duplicated = {d for d in dims if dims.count(d) > 1}
         if duplicated:
@@ -204,15 +218,12 @@ class Ruleset:
     # -- 描述 --------------------------------------------------------------
     @property
     def is_basic(self) -> bool:
-        return not self.layers and self.collision_limit == 1
+        return not self.layers
 
     @property
     def key(self) -> str:
         """唯一标识：基础规则为 "basic"，否则为各层 key 用 "+" 连接。"""
-        keys = [layer.key for layer in self.layers]
-        if self.collision_limit != 1:
-            keys.append("collision")
-        return "+".join(keys) or "basic"
+        return "+".join(layer.key for layer in self.layers) or "basic"
 
     @property
     def spec(self) -> str:
@@ -223,18 +234,12 @@ class Ruleset:
         for layer in self.layers:
             args = ",".join(f"{f.name}={getattr(layer, f.name):g}" for f in fields(layer))
             parts.append(f"{layer.key}:{args}" if args else layer.key)
-        if self.collision_limit != 1:
-            limit = self.collision_limit if self.collision_limit is not None else "unlimited"
-            parts.append(f"collision:limit={limit}")
         return "+".join(parts)
 
     @property
     def title(self) -> str:
         """界面标题，如 "基础规则" 或 "基础规则 + 转弯代价（λ = 1.0）"。"""
-        parts = ["基础规则", *(layer.label() for layer in self.layers)]
-        if self.collision_limit != 1:
-            parts.append("撞墙后继续" if self.collision_limit is None else f"累计 {self.collision_limit} 次撞墙终止")
-        return " + ".join(parts)
+        return " + ".join(["基础规则", *(layer.label() for layer in self.layers)])
 
     @property
     def color(self) -> str:
@@ -254,6 +259,19 @@ class Ruleset:
         return self.cost_layer or _UNIT
 
     @property
+    def env_options(self) -> dict:
+        """各层 env_options() 按维度顺序合并的环境参数（后面的维度覆盖前面的）。"""
+        options: dict = {}
+        for layer in self.layers:
+            options.update(layer.env_options())
+        return options
+
+    @property
+    def collision_limit(self) -> int | None:
+        """累计撞墙几次终止：1 为基础规则（首次撞墙即 invalid_action），None 为不限次数。"""
+        return self.env_options.get("collision_limit", 1)
+
+    @property
     def changes_observation(self) -> bool:
         return any(layer.changes_observation for layer in self.layers)
 
@@ -265,20 +283,20 @@ class Ruleset:
         """替换（或用 None 移除）某个维度上的层，返回新规则。"""
         dim = layer.dimension if layer is not None else dimension
         kept = [l for l in self.layers if l.dimension != dim]
-        return Ruleset(tuple(kept + ([layer] if layer is not None else [])), self.collision_limit)
+        return Ruleset(tuple(kept + ([layer] if layer is not None else [])))
 
     def metadata(self) -> dict:
         """写入 metadata.json 的规则描述。"""
         return {"key": self.key, "spec": self.spec, "title": self.title,
-                "collision": {"limit": self.collision_limit},
+                "collision_limit": self.collision_limit,
                 "layers": [{"key": l.key, "dimension": l.dimension, "params": l.params()}
                            for l in self.layers]}
 
     # -- 运行 --------------------------------------------------------------
-    def make_env(self, maze: Maze, max_steps: int | None):
-        """创建环境：基础环境依次经过各层的 wrap_env。"""
+    def make_env(self, maze: Maze, max_steps: int | None, seed: int | None = None):
+        """创建环境：用合并后的 env_options 创建基础环境，再依次经过各层的 wrap_env。"""
         from core.environment import MazeEnvironment
-        env = MazeEnvironment(maze, max_steps=max_steps, collision_limit=self.collision_limit)
+        env = MazeEnvironment(maze, max_steps=max_steps, seed=seed, **self.env_options)
         for layer in self.layers:
             env = layer.wrap_env(env)
         return env
@@ -287,8 +305,11 @@ class Ruleset:
         """算法（对象或 AlgorithmInfo）能否在本规则下运行。
 
         不改变观测的层对所有算法开放（算法可以不理会代价，只是代价会被如实计算）；
-        改变观测的层只对 supported_rules 中列出该层 key 的算法开放。
+        改变观测的层只对 supported_rules 中列出该层 key 的算法开放；
+        已知地图规划器（mode = "known_map"）不使用观测，不受观测层限制。
         """
+        if getattr(algorithm, "mode", "explore") == "known_map":
+            return True
         declared = getattr(algorithm, "supported_rules", None)
         return all(not layer.changes_observation or (declared is not None and layer.key in declared)
                    for layer in self.layers)
@@ -350,24 +371,16 @@ def parse_rule(spec: str) -> Ruleset:
     """把命令行写法解析为规则。
 
     写法：``basic``；``turn_cost``；``turn_cost:weight=2``；多层用 "+" 连接，
-    如 ``turn_cost:weight=0.5+noisy``（每个维度最多一层）。
+    如 ``turn_cost:weight=0.5+noisy_sensor+collision:limit=3``（每个维度最多一层）。
+    参数值 ``unlimited`` / ``inf`` 表示不限。
     """
     spec = spec.strip()
     if spec in ("", "basic"):
         return BASIC
     layers_by_key = available_layers()
     layers = []
-    collision_limit = 1
-    collision_seen = False
     for part in spec.split("+"):
         key, _, args = part.partition(":")
-        if key == "collision":
-            if collision_seen or not args.startswith("limit="):
-                raise ValueError("specify collision:limit=N or collision:limit=unlimited once")
-            value = args.removeprefix("limit=")
-            collision_limit = None if value == "unlimited" else int(value)
-            collision_seen = True
-            continue
         if key not in layers_by_key:
             raise ValueError(f"unknown rule layer {key!r}; available: basic, {', '.join(layers_by_key)}")
         cls = layers_by_key[key]
@@ -377,9 +390,9 @@ def parse_rule(spec: str) -> Ruleset:
             name, _, value = item.partition("=")
             if name not in types:
                 raise ValueError(f"layer {key!r} has no parameter {name!r}; parameters: {', '.join(types)}")
-            kwargs[name] = float(value)
+            kwargs[name] = float("inf") if value in ("unlimited", "inf") else float(value)
         layers.append(cls(**kwargs))
-    return Ruleset(tuple(layers), collision_limit)
+    return Ruleset(tuple(layers))
 
 
 def preset_rules() -> dict[str, Ruleset]:

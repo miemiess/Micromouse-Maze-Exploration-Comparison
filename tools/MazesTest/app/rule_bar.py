@@ -11,13 +11,13 @@
 不切换时主窗口调用 set_rule(旧规则) 把面板恢复原样。
 """
 
+import math
 from dataclasses import fields
 
 from PySide6.QtCore import QSignalBlocker, Qt, Signal
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (QComboBox, QDoubleSpinBox, QFrame, QHBoxLayout, QLabel, QPushButton,
-                               QSpinBox, QStyledItemDelegate, QStyleOptionViewItem,
-                               QVBoxLayout, QWidget)
+                               QSizePolicy, QStyledItemDelegate, QStyleOptionViewItem, QVBoxLayout, QWidget)
 
 from core.rules import BASIC, BASIC_COLOR, DIMENSIONS, Ruleset, available_layers
 
@@ -65,6 +65,9 @@ class RulePanel(QFrame):
         self.layer_chips.setSpacing(6)
         self.formula = QLabel()
         self.formula.setTextFormat(Qt.RichText)
+        self.formula.setWordWrap(True)   # 多层叠加时说明较长：换行而不撑宽窗口
+        self.formula.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+        self.formula.setMinimumWidth(200)
         self.reset_button = QPushButton("↺ 恢复基础规则")
         self.reset_button.setToolTip("移除全部叠加层，回到基础规则")
         self.reset_button.clicked.connect(lambda: self.ruleRequested.emit(BASIC))
@@ -101,11 +104,16 @@ class RulePanel(QFrame):
                 row.setContentsMargins(0, 0, 0, 0)
                 for f in fields(cls):
                     name, unit = cls.param_labels.get(f.name, (f.name, ""))
+                    low, high = cls.param_ranges.get(f.name, (0.0, 100.0))
                     spin = QDoubleSpinBox()
-                    spin.setDecimals(2)
-                    spin.setRange(0.0, 100.0)
-                    spin.setSingleStep(0.1 if f.default < 5 else 1.0)
-                    spin.setValue(f.default)
+                    unlimited = f.default == math.inf
+                    spin.setDecimals(0 if unlimited else 2)
+                    spin.setRange(low, high)
+                    spin.setSingleStep(1.0 if unlimited or f.default >= 5 else 0.05 if high <= 1 else 0.1)
+                    if unlimited:
+                        spin.setSpecialValueText("不限")   # 最小值表示不限（inf）
+                        spin.setProperty("unlimited", True)
+                    spin.setValue(low if unlimited else f.default)
                     spin.setSuffix(unit)
                     spin.setKeyboardTracking(False)
                     spin.setToolTip(f"{cls.title}：{name}")
@@ -117,17 +125,6 @@ class RulePanel(QFrame):
                 self.param_boxes[cls.key] = box
                 self.config_row.addWidget(box)
             self.config_row.addSpacing(16)
-        self.collision = QComboBox()
-        self.collision.addItems(["首次撞墙终止", "撞墙后继续", "累计 N 次撞墙终止"])
-        self.limit = QSpinBox()
-        self.limit.setRange(1, 2147483647)
-        self.limit.setValue(3)
-        self.limit.setKeyboardTracking(False)
-        self.config_row.addWidget(QLabel("碰撞"))
-        self.config_row.addWidget(self.collision)
-        self.config_row.addWidget(self.limit)
-        self.collision.currentIndexChanged.connect(self._emit)
-        self.limit.valueChanged.connect(self._emit)
         self.config_row.addStretch(1)
         if not self.selectors:
             self.config_row.addWidget(QLabel("（src/ext/rules/ 中还没有可叠加的规则层）"))
@@ -143,7 +140,7 @@ class RulePanel(QFrame):
     def set_rule(self, rule: Ruleset) -> None:
         """按 rule 同步全部控件与配色（不发出信号）。"""
         self.rule = rule
-        blockers = [QSignalBlocker(w) for w in [*self.selectors.values(), *self.spins.values(), self.collision, self.limit]]
+        blockers = [QSignalBlocker(w) for w in [*self.selectors.values(), *self.spins.values()]]
         for dimension, combo in self.selectors.items():
             layer = rule.layer(dimension)
             combo.setCurrentIndex(max(0, combo.findData(layer.key if layer else None)))
@@ -152,12 +149,9 @@ class RulePanel(QFrame):
             box.setVisible(active is not None)
             if active is not None:
                 for f in fields(active):
-                    self.spins[(key, f.name)].setValue(getattr(active, f.name))
-        mode = 1 if rule.collision_limit is None else 0 if rule.collision_limit == 1 else 2
-        self.collision.setCurrentIndex(mode)
-        if mode == 2:
-            self.limit.setValue(rule.collision_limit)
-        self.limit.setVisible(mode == 2)
+                    spin = self.spins[(key, f.name)]
+                    value = getattr(active, f.name)
+                    spin.setValue(spin.minimum() if value == math.inf else value)
         del blockers
         self._refresh_stack()
 
@@ -170,16 +164,18 @@ class RulePanel(QFrame):
             if key is None:
                 continue
             cls = self.layer_classes[key]
-            layers.append(cls(**{f.name: self.spins[(key, f.name)].value() for f in fields(cls)}))
-        limit = (1, None, self.limit.value())[self.collision.currentIndex()]
-        return Ruleset(tuple(layers), limit)
+            layers.append(cls(**{f.name: spin_value(self.spins[(key, f.name)]) for f in fields(cls)}))
+        return Ruleset(tuple(layers))
 
     def _emit(self, *_args) -> None:
         """下拉框或参数改变：显示对应的参数框，并请求切换规则。"""
         for key, box in self.param_boxes.items():
             box.setVisible(any(c.currentData() == key for c in self.selectors.values()))
-        self.limit.setVisible(self.collision.currentIndex() == 2)
-        rule = self.current_selection()
+        try:
+            rule = self.current_selection()
+        except ValueError:          # 参数不合法（层的 __post_init__ 拒绝）：恢复原规则
+            self.set_rule(self.rule)
+            return
         if rule != self.rule:
             self.ruleRequested.emit(rule)
 
@@ -204,9 +200,7 @@ class RulePanel(QFrame):
         if rule.is_basic:
             self.formula.setText(f"<span style='color:#495057'>{BASIC_DESCRIPTION}</span>")
         else:
-            text = cost.formula if cost else "；".join(l.summary for l in rule.layers)
-            if rule.collision_limit != 1:
-                text += (" · " if text else "") + self.collision.currentText().replace("N", str(rule.collision_limit))
+            text = "；".join(cost.formula if l is cost else l.summary for l in rule.layers)
             self.formula.setText(
                 f"<b style='color:{rule.color}'>{text}</b>"
                 "<span style='color:#495057'>　·　结果不可与基础规则直接比较</span>")
@@ -215,6 +209,13 @@ class RulePanel(QFrame):
         self.setStyleSheet(
             f"#RulePanel {{ background:{tinted(color, 18 if rule.is_basic else 34)};"
             f" border-left:8px solid {color}; border-bottom:1px solid {tinted(color, 120)}; }}")
+
+
+def spin_value(spin: QDoubleSpinBox) -> float:
+    """参数框的值；“不限”参数在最小值处取 inf。"""
+    if spin.property("unlimited") and spin.value() == spin.minimum():
+        return math.inf
+    return spin.value()
 
 
 class AlgorithmGroupDelegate(QStyledItemDelegate):

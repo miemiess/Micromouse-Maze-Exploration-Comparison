@@ -46,3 +46,6 @@ Luca 2026-11-22 上位机固定 Fusion 浅色主题与灰色选中背景，保�
 Luca 2026-11-22 按已接入的 E1/E3 实现更新扩展算法说明、路线图、报告与结果入口，补充转弯迷宫验收示例及单次规划代价界。
 Luca 2026-11-22 上位机算法下拉框按当前规则适配和算法来源分组，取消算法名称着色，保留切换前可用的选择。
 zhouying682 2026-11-22 新增独立碰撞上限，接通环境、规则计价、上位机、CLI、批量结果与接触反馈。
+Luca 2026-11-22 撞墙规则改写为正式规则层 src/ext/rules/collision.py（新维度 contact）：规则层新增 env_options() 钩子与 param_ranges，Ruleset 去掉专用的 collision_limit 字段，基础规则结果恢复不追加 actions / collisions；已知地图规划器不受观测层限制
+Luca 2026-11-22 完成 E2：噪声观测层 src/ext/rules/noisy_sensor.py（前 / 侧 / 后准确率，边界与接触反馈可靠，种子可复现，默认撞墙后继续）、置信度重规划 src/ext/algorithms/belief_astar.py（对数几率融合）及消融 belief_astar_naive；新增 test_noisy_sensor 与上位机测试；130 项测试通过
+Luca 2026-11-22 Docs/ext/dev-plan.md 新增“进度看板”（状态、负责人、下一步顺序、已做决定、待核查问题），README 进度行指向它

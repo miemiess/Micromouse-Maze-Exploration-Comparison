@@ -173,7 +173,8 @@ class ExperimentRun:
             "coverage": round(len(set(map(tuple, path))) / (maze.width * maze.height), 4),
             "compute_ms": round(statistics.median(times), 3),
             "compute_ms_min": round(min(times), 3), "repeats": self.repeats,
-            "consistent": all(all(r[k] == first[k] for k in ("path", "status", "collisions", "actions", "turns_90")) for r in results),
+            "consistent": all(all(r.get(k) == first.get(k) for k in ("path", "status", "collisions", "actions", "turns_90"))
+                              for r in results),
             "expanded_nodes": first.get("expanded_nodes", ""),
             "peak_memory_bytes": self._peak_memory(maze, info, seed) if self.measure_memory else "",
             "error": (first.get("error") or "").strip().splitlines()[-1] if first.get("error") else "",

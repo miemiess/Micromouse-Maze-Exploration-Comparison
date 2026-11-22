@@ -138,12 +138,17 @@ class Maze:
 class MazeEnvironment:
     """管理电脑鼠的位置、观测、移动和本次运行的统计。"""
 
-    def __init__(self, maze: Maze, max_steps: int | None = None, *, collision_limit: int | None = 1):
+    def __init__(self, maze: Maze, max_steps: int | None = None, *, collision_limit: int | None = 1,
+                 seed: int | None = None):
         """创建环境并回到起点。
 
         Args:
             maze: 真值迷宫，只由环境持有。
-            max_steps: 移动预算；None 时为 20 × 格子数。
+            max_steps: 动作预算（每次有效方向尝试计一次，含撞墙）；None 时为 20 × 格子数。
+            collision_limit: 累计撞墙几次终止。1 为基础规则：首次撞墙即 invalid_action，且不计入转向；
+                N > 1 时撞墙原地转向、不移动，第 N 次记为 collision_limit；None 为不限次数。
+                由撞墙处理层（src/ext/rules/collision.py）或噪声观测层设置。
+            seed: 运行的随机种子，只供规则层的环境包装（如噪声观测）读取，环境本身不使用随机数。
 
         Raises:
             TypeError: maze 不是 Maze。
@@ -159,6 +164,8 @@ class MazeEnvironment:
         if collision_limit is not None and (type(collision_limit) is not int or collision_limit < 1):
             raise ValueError("collision_limit must be a positive integer or None")
         self.collision_limit = collision_limit
+        self.seed = seed
+        self.maze_id, self.width, self.height = maze.maze_id, maze.width, maze.height  # 公开的地图尺寸，不含墙
         self._maze = maze
         self.max_steps = max_steps
         self.reset()
@@ -274,9 +281,14 @@ class MazeEnvironment:
             peak_memory_bytes: 峰值内存（字节），未测量时为 None。
 
         Returns:
-            包含状态、步数、重复访问、转向、耗时、路径和内存的字典。
+            包含状态、步数、重复访问、转向、耗时、路径和内存的字典；允许撞墙后继续时
+            （collision_limit ≠ 1）另含 actions（动作数）与 collisions（撞墙次数）。
+            基础规则下字段与 basic-rules-v1 相同。
         """
-        return {"status": self.status, "steps": self.steps, "actions": self.actions, "collisions": self.collisions,
-                "repeat_visits": self.repeat_visits, "turns_90": self.turns_90,
-                "compute_seconds": compute_seconds, "path": list(self.path),
-                "peak_memory_bytes": peak_memory_bytes}
+        summary = {"status": self.status, "steps": self.steps,
+                   "repeat_visits": self.repeat_visits, "turns_90": self.turns_90,
+                   "compute_seconds": compute_seconds, "path": list(self.path),
+                   "peak_memory_bytes": peak_memory_bytes}
+        if self.collision_limit != 1:
+            summary.update(actions=self.actions, collisions=self.collisions)
+        return summary

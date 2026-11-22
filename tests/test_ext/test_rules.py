@@ -75,8 +75,10 @@ class RulesetTests(unittest.TestCase):
         layers = available_layers()
         self.assertEqual(layers["turn_cost"], TurnCostLayer)
         self.assertEqual(layers["motion_time"], MotionTimeLayer)
-        self.assertTrue(all(issubclass(c, CostLayer) for c in layers.values()))
-        self.assertEqual(set(preset_rules()), {"basic", "turn_cost", "motion_time"})
+        self.assertTrue(all(issubclass(layers[k], CostLayer) for k in ("turn_cost", "motion_time")))
+        self.assertEqual({k: c.dimension for k, c in layers.items() if k not in ("turn_cost", "motion_time")},
+                         {"collision": "contact", "noisy_sensor": "observation"})
+        self.assertEqual(set(preset_rules()), {"basic", *layers})
 
     def test_core_does_not_import_ext(self):
         """分层约束：公共接口层 src/core/ 不静态导入扩展层（规则层只经自动发现接入）。"""
@@ -91,10 +93,9 @@ class RunnerHookTests(unittest.TestCase):
         """改变观测的层只对声明支持的算法开放；wrap_env 生效；configure 在每次规划前调用。"""
         rule = Ruleset((_ShortBudget(),))
         maze = Maze.from_json(MAP)
-        planner = load_algorithm("bfs")
         with self.assertRaisesRegex(ValueError, "does not support"):
-            Runner(maze, planner, rule=rule)
-        planner.supported_rules = {"short_budget"}
+            Runner(maze, load_algorithm("dfs"), rule=rule)     # 探索算法未声明支持
+        planner = load_algorithm("bfs")                         # 已知地图规划器不受观测层限制
         order = []
         plan = planner.plan
         planner.configure = lambda received: order.append(received)

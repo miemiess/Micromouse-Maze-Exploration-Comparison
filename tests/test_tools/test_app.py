@@ -136,6 +136,31 @@ class AppTests(unittest.TestCase):
         self.assertIn(f"cost {snap.stats['rule_cost']}", title)
         self.assertTrue(window.run_tab.rule_labels["rule_cost"].text().endswith(" s"))
 
+    def test_noise_and_collision_layers_in_panel(self):
+        """噪声观测与撞墙处理都是普通叠加层：面板出现标签；不支持噪声的探索算法置灰；撞墙上限可设“不限”。"""
+        from PySide6.QtWidgets import QLabel
+        window = self.window
+        self.assertTrue(window.select_rule("noisy_sensor+collision:limit=5"))
+        panel = window.rule_panel
+        for key in ("noisy_sensor", "collision"):
+            self.assertIsNotNone(panel.findChild(QLabel, f"chip_{key}"))
+        combo = window.run_tab.algorithm
+        enabled = {combo.itemText(i) for i in range(combo.count()) if combo.model().item(i).isEnabled()}
+        self.assertIn("belief_astar", enabled)
+        self.assertNotIn("repeated_astar", enabled)
+        self.assertEqual(combo.currentText(), "belief_astar")    # 当前项失效时改选“为当前规则设计”组
+        snap = window.run_tab.runner.run()
+        self.assertIn(snap.status, {"success", "collision_limit"})   # 上限 5 次可能提前终止
+        self.assertLessEqual(snap.stats["collisions"], 5)
+        self.assertNotEqual(window.run_tab.stat_labels["collisions"].text(), "-")
+        spin = panel.spins[("collision", "limit")]
+        self.assertEqual(spin.value(), 5)
+        spin.setValue(spin.minimum())                               # 最小值 = 不限
+        self.assertEqual(window.rule.spec.split("+")[-1], "collision:limit=inf")
+        self.assertIsNone(window.rule.collision_limit)
+        window.select_rule("basic")
+        self.assertEqual(window.run_tab.stat_labels["collisions"].text(), "-")
+
     def test_map_library_import_and_save(self):
         """导入的地图进入地图库并出现在下拉框；库外打开的地图修改后保存为库中的副本。"""
         from maze_document import generate

@@ -1,4 +1,4 @@
-"""碰撞计数、接触反馈和规则组合的回归用例。"""
+"""撞墙处理层（src/ext/rules/collision.py）：碰撞计数、接触反馈和规则组合的回归用例。"""
 
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -8,7 +8,8 @@ import unittest
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
 from core.algorithm_api import Direction as D, Maze, Runner
-from core.rules import RuleLayer, Ruleset, parse_rule
+from core.rules import BASIC, RuleLayer, Ruleset, parse_rule
+from ext.rules.collision import CollisionLayer
 
 
 def maze():
@@ -57,11 +58,10 @@ class FalseNegative(RuleLayer):
 
 class CollisionTests(unittest.TestCase):
     def test_first_collision_and_illegal_direction(self):
-        for spec in ("basic", "collision:limit=1"):
-            r = Runner(maze(), Script(D.EAST), rule=parse_rule(spec))
-            snap = r.step()
-            self.assertEqual((snap.status, snap.heading, snap.stats["collisions"], snap.stats["steps"]),
-                             ("invalid_action", D.NORTH, 1, 0))
+        r = Runner(maze(), Script(D.EAST), rule=BASIC)
+        snap = r.step()
+        self.assertEqual((snap.status, snap.heading, snap.stats["steps"]), ("invalid_action", D.NORTH, 0))
+        self.assertNotIn("collisions", snap.stats)          # 基础规则不追加字段
         r = Runner(maze(), Script("E"), rule=parse_rule("collision:limit=unlimited"))
         snap = r.step()
         self.assertEqual((snap.status, snap.blocked, snap.stats["collisions"]), ("invalid_action", None, 0))
@@ -69,7 +69,8 @@ class CollisionTests(unittest.TestCase):
     def test_limit_and_budget(self):
         for limit, budget, status in ((2, 2, "collision_limit"), (3, 2, "budget_exceeded"),
                                        (None, 2, "budget_exceeded")):
-            r = Runner(maze(), Script(D.EAST, D.EAST), rule=Ruleset(collision_limit=limit), max_steps=budget)
+            layer = CollisionLayer() if limit is None else CollisionLayer(limit=limit)
+            r = Runner(maze(), Script(D.EAST, D.EAST), rule=Ruleset((layer,)), max_steps=budget)
             first = r.step()
             self.assertEqual((first.status, first.position, first.heading), ("running", (0, 0), D.EAST))
             last = r.step()
@@ -92,11 +93,14 @@ class CollisionTests(unittest.TestCase):
             self.assertAlmostEqual(snap.stats["rule_cost"], expected, places=6)
 
     def test_spec_roundtrip_and_validation(self):
-        for value in ("unlimited", "2", "1"):
+        for value, limit in (("unlimited", None), ("inf", None), ("2", 2)):
             rule = parse_rule(f"collision:limit={value}+turn_cost")
             self.assertEqual(parse_rule(rule.spec), rule)
-            self.assertEqual(rule.metadata()["collision"]["limit"], rule.collision_limit)
-        for value in ("-1", "0", "1.1", "x", "2+collision:limit=3"):
+            self.assertEqual(rule.collision_limit, limit)
+            self.assertEqual(rule.metadata()["collision_limit"], limit)
+        self.assertEqual(parse_rule("collision"), parse_rule("collision:limit=inf"))
+        self.assertEqual(BASIC.collision_limit, 1)
+        for value in ("-1", "0", "1", "1.1", "x", "2+collision:limit=3"):
             with self.assertRaises(ValueError):
                 parse_rule("collision:limit=" + value)
 
@@ -116,4 +120,4 @@ class CollisionTests(unittest.TestCase):
             self.assertEqual(row["collisions"], "0")
             meta = json.loads((Path(out) / "metadata.json").read_text())["rule"]
             self.assertEqual(meta["spec"], spec)
-            self.assertEqual(meta["collision"], {"limit": 3})
+            self.assertEqual(meta["collision_limit"], 3)

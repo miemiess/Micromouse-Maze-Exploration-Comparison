@@ -22,7 +22,7 @@ src/
     dev_tuning.py           C2 开发集调参 → results/basic/dev/tuning.md
     posthoc_stratified.py   事后分析：分层开发集 → results/basic/dev/posthoc.md
   ext/                    扩展层（开发中）：新规则与为新规则写的算法，见 ext/README.md
-    rules/                  叠加层：turn_cost.py（转弯代价）、motion_time.py（运动时间模型）
+    rules/                  叠加层：turn_cost.py（转弯代价）、motion_time.py（运动时间）、noisy_sensor.py（噪声观测）、collision.py（撞墙处理）
     algorithms/             扩展算法（自动发现扫描本目录）：rule_optimal.py（规则最优参照）
     plan.py                 （待建）扩展实验计划，注册为 --plan <名称>
 ```
@@ -84,6 +84,8 @@ src/
   的规则最优路线，已知地图规划器 `rule_optimal` 即用它。
 - 算法可实现 `configure(rule)`，每次策略重置或已知地图规划前调用；类属性 `supported_rules`（层 key 的集合）
   声明支持哪些**改变观测**的层，不改变观测的层（如代价层）对所有算法开放。
+- 层可实现 `env_options()`（创建环境的关键字参数，如 `collision_limit`，按维度顺序合并）和 `wrap_env(env)`
+  （包装环境；需要随机数时读 `env.seed`，即运行种子）。维度：代价 cost、观测 observation、撞墙处理 contact、比赛流程 flow。
 - 所有算法在同一个算法库里，任何规则下都可直接运行（基础算法就是“不懂新规则”的对照组），不按规则拆分。
   为某些层设计的算法用类属性 `designed_for = ("turn_cost",)` 声明：只用于上位机算法下拉框分组（为当前规则设计）和
   `metadata.json` 的 `algorithm_info` 分组，不限制运行。
@@ -291,14 +293,15 @@ class StepResult:
 基础规则下，策略返回非法类型、越界方向或尝试穿过已观测墙壁时，本轮记为 `invalid_action` 并立即
 终止；该动作不增加移动步数、转弯数或路径。环境不得静默忽略错误或替策略选择其他方向。
 
-### 碰撞策略
+### 撞墙处理（扩展规则）
 
-上位机碰撞菜单和命令行共用一个次数上限。默认上限 1 保留首次撞墙时的原行为；
-`--rule collision:limit=unlimited` 允许继续，`--rule turn_cost:weight=2+collision:limit=3`
-在第 3 次累计撞墙时终止。运动时间层也可组合。metadata 的 collision.limit 为 null 时表示不限次数。
-每次有效方向尝试消耗一次动作预算。恢复模式下碰墙会原地转到尝试方向，结束当前直行段，
-不增加步数、路径长度或访问次数。接触后的观测以 `collision_wall` 标记方向，
-且 `walls` 包含该方向，优先于传感器读数。碰撞上限与预算同时触发时优先报告碰撞上限。
+基础规则下首次撞墙即 `invalid_action`（理想观测下只有写错的算法才会撞墙）。撞墙处理层
+`src/ext/rules/collision.py`（contact 维度）改为：撞墙时原地转向撞墙方向、不移动，不增加步数、路径长度或访问次数，
+转向照常计数，代价层结束当前直线段；每次有效方向尝试消耗一次动作预算；撞墙后的观测为 `ContactObservation`，
+`collision_wall` 标出撞到的方向且 `walls` 一定包含它（优先于噪声传感器读数）；累计撞墙达到上限时状态为
+`collision_limit`（与预算同时触发时优先报告它）。写法：`collision`（不限次数）、`collision:limit=3`。
+噪声观测层 `noisy_sensor` 默认撞墙后继续（漏报必然导致撞墙），可再叠加 `collision:limit=N` 设上限。
+此时运行结果另含 `actions`、`collisions`；metadata 的 `rule.collision_limit` 为 null 表示不限次数。
 
 ## 运行与终止状态
 
@@ -310,7 +313,7 @@ class StepResult:
 | `success` | 到达任意目标格 |
 | `no_path` | 策略返回 `None`，声明无法继续 |
 | `loop_detected` | 策略返回 `None` 且 `loop_detected` 为真：判定陷入循环（目标可能可达，只是该策略到不了） |
-| `collision_limit` | 撞墙累计达到配置上限（N > 1） |
+| `collision_limit` | 撞墙累计达到撞墙处理层设置的上限（仅扩展规则） |
 | `budget_exceeded` | 达到动作预算仍未到达目标 |
 | `timeout` | 累计策略计算时间超过统一预算 |
 | `invalid_action` | 非法方向、越界或尝试穿墙 |
