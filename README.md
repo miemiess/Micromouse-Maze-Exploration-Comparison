@@ -11,7 +11,7 @@ Computational Thinking for AI 小组项目（Track A：自主机器人导航与�
 | 阶段 | 状态 | 入口 |
 | --- | --- | --- |
 | **基础规则**（16×16、每步代价 1、理想观测） | ✅ 已完成并冻结，标签 `basic-rules-v1` | 代码 [`src/basic/`](src/basic/README.md) · 结果 [`results/basic/`](results/README.md) · 文档 [`Docs/basic/`](Docs/README.md) |
-| **扩展规则**（转弯代价、两阶段、噪声；启发式与近似算法） | 🟡 E0 规则基础设施、E1 转弯代价与运动时间模型已完成；下一项为 E3（懂规则的探索算法） | 路线图 [`Docs/ext/dev-plan.md`](Docs/ext/dev-plan.md) · 代码 [`src/ext/`](src/ext/README.md) |
+| **扩展规则**（转弯代价、两阶段、噪声；启发式与近似算法） | 🟡 E0 规则基础设施、E1 转弯代价与运动时间模型已完成；E3 四个探索策略已接入上位机 | 路线图 [`Docs/ext/dev-plan.md`](Docs/ext/dev-plan.md) · 代码 [`src/ext/`](src/ext/README.md) |
 | **最终报告** | 🟡 中文初稿，扩展结果、英文定稿、贡献记录待完成 | [`Docs/Result.md`](Docs/Result.md) |
 
 **基础阶段的主要结论**（详见报告第 2、4 章）：
@@ -99,7 +99,7 @@ mazes/                     地图：classic/ 下全部地图（外部迷宫库 e
 | --- | --- | --- | --- | --- |
 | E0 | 0 | 基础设施：`Ruleset`（基础规则 + 叠加层）；`Runner` / 实验框架的 `rule` 参数（默认基础规则）；`--rule`；上位机规则面板 | 无 | 已完成 · [`src/core/rules.py`](src/core/rules.py) · [测试](tests/test_ext/test_rules.py) |
 | E1 | 1 | 运动时间模型与转弯代价规则（参数来源要记录）；规则最优参照 `rule_optimal` | E0 | 已完成 · [`src/ext/rules/`](src/ext/rules/) · [测试](tests/test_ext/test_turn_cost.py) |
-| E3 | 1 | 启发式搜索：（格子, 朝向）A*、加权 A*；可选 D* Lite、前沿探索。E3-1 懂规则的重复 A* 已完成：[`turn_aware_astar.py`](src/ext/algorithms/turn_aware_astar.py) · [测试](tests/test_ext/test_turn_aware_astar.py) | E0；转弯加权依赖 E1 | E3-1：zhouying682 / 已完成；其他可选项待认领 |
+| E3 | 1 | [朝向 A* 与加权变体](src/ext/algorithms/turn_aware_astar.py) · [测试](tests/test_ext/test_turn_aware_astar.py)；[D* Lite](src/ext/algorithms/dstar_lite.py) · [最近前沿探索](src/ext/algorithms/frontier.py) · [测试](tests/test_ext/test_incremental_frontier.py) | E0；转弯加权依赖 E1 | zhouying682 / 四个策略开发完成，E3-1 已验收；正式对照实验待做 |
 | D5 | 2 | 两阶段规则（探索 + 冲刺）与 ε 提前停止（近似算法） | E0 | 待认领 / 未开始 |
 | E2 | 3 | 传感器噪声与置信度融合（**先开 Issue 讨论撞墙规则**） | E0；需组内同意 | 待认领 / 未开始 |
 | D4 | 可选 | 迷宫难度刻画与对抗式生成最坏迷宫 | 无 | 待认领 / 未开始 |
