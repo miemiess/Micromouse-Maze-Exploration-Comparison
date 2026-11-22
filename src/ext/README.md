@@ -10,6 +10,7 @@
 | `algorithms/` | 为扩展规则编写的算法，每个算法一个文件；自动发现扫描本目录。共用的搜索与已知墙在 `core/planning.py` | 已有 `rule_optimal.py`（已知地图上的规则最优参照）；E3 探索策略：`turn_aware_astar`、`turn_aware_astar_w2`、`dstar_lite`、`frontier`。后两项按步数选路，在代价叠加层中也可按相同规则评价 |
 | `difficulty.py` | D4：迷宫难度特征（环路、死胡同、分岔、绕路、转向）与基础结果的 Spearman 相关；模拟退火生成对抗迷宫。`python src/ext/difficulty.py features` / `adversarial --algorithm <名称>` | 已完成，结果在 `results/ext/difficulty/` |
 | `plan.py` | 扩展实验计划，定义 `PLANS`：`--plan ext_turn`（转弯代价 / 运动时间）、`--plan ext_noise`（噪声）、`--plan ext_two_phase`（两阶段）；地图划分见 `mazes/splits/ext_dev.json`；规则见 `Docs/ext/experiment-plan.md`；加 `--dry-run` 只预览设置与输出目录、不运行 | 已建，计划待冻结 |
+| `posthoc.py` | 事后验证（看过正式结果之后做的，不属于冻结计划）：`divisor` 用 X3 数据重算不同探索折算系数下的两阶段成绩（发现 12）；`contact` 去掉接触反馈并分解撞墙来源，检验置信度融合没有优势的原因（发现 11）。输出 `results/ext/posthoc/` | 已完成 · `tests/test_ext/test_posthoc.py` |
 
 ## 已实现的算法
 

@@ -11,8 +11,8 @@ Computational Thinking for AI 小组项目（Track A：自主机器人导航与�
 | 阶段 | 状态 | 入口 |
 | --- | --- | --- |
 | **基础规则**（16×16、每步代价 1、理想观测） | ✅ 已完成并冻结，标签 `basic-rules-v1` | 代码 [`src/basic/`](src/basic/README.md) · 结果 [`results/basic/`](results/README.md) · 文档 [`Docs/basic/`](Docs/README.md) |
-| **扩展规则**（转弯代价、两阶段、噪声；启发式与近似算法） | 🟡 E0～E3、D4、D5 与撞墙处理已实现；[实验计划](Docs/ext/experiment-plan.md)已冻结，[X1～X3 正式结果与分析](results/ext/README.md)已完成，报告待写 | **[进度看板与路线图](Docs/ext/dev-plan.md#0-进度看板)** · [扩展算法](src/ext/README.md#已实现的算法) |
-| **最终报告** | 🟡 中文初稿，扩展结果、英文定稿、贡献记录待完成 | [`Docs/Result.md`](Docs/Result.md) |
+| **扩展规则**（转弯代价、两阶段、噪声；启发式与近似算法） | 🟡 E0～E3、D4、D5 与撞墙处理已实现；[实验计划](Docs/ext/experiment-plan.md)已冻结，[X1～X3 正式结果与分析](results/ext/README.md)已完成并写入报告第 3 章 | **[进度看板与路线图](Docs/ext/dev-plan.md#0-进度看板)** · [扩展算法](src/ext/README.md#已实现的算法) |
+| **最终报告** | 🟡 中文初稿（含扩展结果），英文定稿、参考文献核查、贡献记录待完成 | [`Docs/Result.md`](Docs/Result.md) |
 
 **基础阶段的主要结论**（详见报告第 2、4 章）：
 
@@ -100,11 +100,11 @@ mazes/                     地图：classic/ 下全部地图（外部迷宫库 e
 | --- | --- | --- | --- | --- |
 | E0 | 0 | 基础设施：`Ruleset`（基础规则 + 叠加层）；`Runner` / 实验框架的 `rule` 参数（默认基础规则）；`--rule`；上位机规则面板 | 无 | 已完成 · [`src/core/rules.py`](src/core/rules.py) · [测试](tests/test_ext/test_rules.py) |
 | E1 | 1 | 运动时间模型与转弯代价规则（参数来源要记录）；规则最优参照 `rule_optimal` | E0 | 已完成 · [`src/ext/rules/`](src/ext/rules/) · [测试](tests/test_ext/test_turn_cost.py) |
-| E3 | 1 | [朝向 A* 与加权变体](src/ext/algorithms/turn_aware_astar.py) · [测试](tests/test_ext/test_turn_aware_astar.py)；[D* Lite](src/ext/algorithms/dstar_lite.py) · [最近前沿探索](src/ext/algorithms/frontier.py) · [测试](tests/test_ext/test_incremental_frontier.py) | E0；转弯加权依赖 E1 | zhouying682 / 四个策略开发完成，E3-1 已验收；对照计划已接入，正式结果待生成 |
-| D5 | 2 | 两阶段规则与 ε 提前停止：[两阶段规则层](src/ext/rules/two_phase.py) · [有界提前停止](src/ext/algorithms/bounded_explore.py) · [测试](tests/test_ext/test_two_phase.py) | E0 | Luca / 已完成；正式实验（X3）待做 |
-| E2 | 3 | 传感器噪声与置信度融合：[噪声观测层](src/ext/rules/noisy_sensor.py) · [撞墙处理层](src/ext/rules/collision.py) · [置信度重规划](src/ext/algorithms/belief_astar.py) · [测试](tests/test_ext/test_noisy_sensor.py) | E0 | Luca、zhouying682 / 已完成；正式实验待做 |
+| E3 | 1 | [朝向 A* 与加权变体](src/ext/algorithms/turn_aware_astar.py) · [测试](tests/test_ext/test_turn_aware_astar.py)；[D* Lite](src/ext/algorithms/dstar_lite.py) · [最近前沿探索](src/ext/algorithms/frontier.py) · [测试](tests/test_ext/test_incremental_frontier.py) | E0；转弯加权依赖 E1 | zhouying682 / 四个策略开发完成，E3-1 已验收；X1 已完成 |
+| D5 | 2 | 两阶段规则与 ε 提前停止：[两阶段规则层](src/ext/rules/two_phase.py) · [有界提前停止](src/ext/algorithms/bounded_explore.py) · [测试](tests/test_ext/test_two_phase.py) | E0 | Luca / 已完成；X3 已完成 |
+| E2 | 3 | 传感器噪声与置信度融合：[噪声观测层](src/ext/rules/noisy_sensor.py) · [撞墙处理层](src/ext/rules/collision.py) · [置信度重规划](src/ext/algorithms/belief_astar.py) · [测试](tests/test_ext/test_noisy_sensor.py) | E0 | Luca、zhouying682 / 已完成；X2 已完成 |
 | D4 | 可选 | 迷宫难度刻画与对抗式生成最坏迷宫：[`src/ext/difficulty.py`](src/ext/difficulty.py) · [结果](results/ext/difficulty/) · [测试](tests/test_ext/test_difficulty.py) | 无 | Luca / 已完成 |
-| 全员 | 收尾 | 报告第 3 章扩展结果、英文定稿、参考文献核查、贡献记录、在干净提交上重跑全部实验 | 各模块结果 | 全员 / 未开始 |
+| 全员 | 收尾 | ~~报告第 3 章扩展结果~~（已完成）、英文定稿、参考文献核查、贡献记录、在干净提交上重跑全部实验 | 各模块结果 | 全员 / 未开始 |
 
 ## 课程要求对应
 
@@ -115,10 +115,10 @@ mazes/                     地图：classic/ 下全部地图（外部迷宫库 e
 | 问题定义、计算模型 | 报告第 1 章；`src/README.md`；`src/core/environment.py` |
 | 算法设计与选择理由 | 报告 2.1、2.6、第 4 章；`Docs/basic/algorithm-methods.md`、`algorithm-design.md` |
 | 复杂度分析 | 报告 2.2、4.2；算法登记表 |
-| 启发式 / 近似算法 | 基础：新方案与消融（第 4 章）；扩展：已实现 w = 2 的加权 A*；ε 提前停止列入 D5 |
+| 启发式 / 近似算法 | 基础：新方案与消融（第 4 章）；扩展：加权 A*（w = 2）、ε 有界提前停止，结果见报告 3.7～3.9 |
 | Python 概念验证 | `src/`、`tools/MazesTest/` |
 | 实验评价 | `Docs/basic/experiment-plan.md`；`results/basic/`；扩展：`results/ext/` |
-| 局限与改进 | 报告 2.7、第 5 章 |
+| 局限与改进 | 报告 2.7、3.10、第 5 章 |
 | 最终报告 | `Docs/Result.md`（定稿后译为英文） |
 
 允许使用现有库和开源实现，但需要解释与论证算法选择；不把第三方源码直接当作本组原创。
