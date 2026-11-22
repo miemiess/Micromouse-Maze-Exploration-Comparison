@@ -1,11 +1,15 @@
 # 扩展阶段结果
 
-扩展规则下的正式结果放在这里，每个规则或实验一个子目录（例如 `turn_cost/main/`），待 `src/ext/plan.py` 注册正式计划后生成：
+扩展实验按[扩展实验计划](../../Docs/ext/experiment-plan.md)运行，计划注册在 `src/ext/plan.py`。运行前可加 `--dry-run` 预览地图、种子、规则、CSV 字段和输出目录（不运行、不写文件）：
 
 ```bash
-python src/run_experiments.py --plan <名称>
+python src/run_experiments.py --plan ext_turn --dry-run
+python src/run_experiments.py --plan ext_noise --dry-run
 ```
 
-每个目录的文件格式与 `results/basic/` 相同（`runs.csv`、`summary.*`、`metadata.json`、`figures/`），`metadata.json` 另外记录规则与参数。实验计划与开发 / 测试划分见 [`Docs/ext/dev-plan.md`](../../Docs/ext/dev-plan.md)。
+- `--plan ext_turn` → `results/ext/turn/<子实验>/`：`lambda_0.5`、`lambda_1`、`lambda_2`、`lambda_4`、`motion_time`，测试集 435 张地图 × 10 个探索算法，计时重复 3 次。
+- `--plan ext_noise` → `results/ext/noise/<子实验>/`：`ideal`、`high`、`mid`、`low`，噪声子集 200 张地图 × 2 个算法 × 5 个种子。
 
-目前尚无扩展阶段的正式对照结果。算法实现和固定迷宫的验收示例见[扩展算法说明](../../src/ext/README.md#已实现的算法)。
+每个子实验包含 `runs.csv`、`summary.csv`、`summary.md`、`metadata.json` 和 `figures/`，格式与 `results/basic/` 相同；规则参数、撞墙上限与地图清单记录在 `metadata.json`，字段含义见[结果说明](../README.md)。归档前可加 `--out results/local/<目录>` 先写到本地。
+
+当前正式结果待生成（计划确认冻结后运行）。算法实现与固定迷宫的验收示例见[扩展算法说明](../../src/ext/README.md#已实现的算法)。

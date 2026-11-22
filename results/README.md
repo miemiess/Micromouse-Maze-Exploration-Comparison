@@ -17,15 +17,18 @@
 
 | 文件 | 内容 |
 | --- | --- |
-| `runs.csv` | 原始数据，每次运行一行 |
+| `runs.csv` | 每个地图、算法和种子组合一行。多次重复的计算耗时取中位数，`consistent` 记录行为是否一致 |
 | `summary.csv`、`summary.md` | 按（地图组, 算法）汇总，`ALL` 为全部地图 |
-| `metadata.json` | 代码提交号、Python 版本、平台、预算、计时范围、开始与结束时间 |
+| `metadata.json` | 代码提交号、运行环境、预算和计时范围。当前导出还记录 `rule.spec`、`rule.collision_limit` 与 `algorithm_info` |
 | `figures/*.png` | 图表，可用 `python src/run_experiments.py --plot <目录>` 从 CSV 重新生成 |
 
 ## runs.csv 字段
 
 `run_id`、`experiment`、`maze_id`、`map_group`、`algorithm`、`experiment_mode`（unknown_exploration / known_map_planning）、`config_id`、`seed`、`status`、`steps`、`shortest`、`ratio`、`turns_90`、`repeat_visits`、`visited_cells`、`coverage`、`compute_ms`、`compute_ms_min`、`repeats`、`consistent`、`expanded_nodes`、`peak_memory_bytes`、`error`。
 
+- 有代价层时，追加 `rule`、`rule_cost`、`optimal_rule_cost`、`rule_cost_ratio`。参数以 `metadata.json` 中的 `rule.spec` 为准。
+- 上位机批量实验、扩展计划和开启碰撞恢复的实验导出 `actions` 与 `collisions`。命令行自选实验可加 `--collision-stats` 统一导出口径。汇总包含平均动作数、平均碰撞数和至少撞墙一次的运行比例。碰撞上限为 `null` 表示不限次数。
+- 基础结果的元数据记录了原始运行时的版本 `4e768cb+dirty`。复现时建议用 `--out` 输出到独立目录，便于比较原始产物与新产物。
 - 失败的运行保留状态与原因；`ratio` 等只与成功路径有关的指标留空，不填 0。
 - 计时只含算法自身，不含读图、绘图、动画与写盘；随机方法记录种子。
 - 未知地图探索与已知地图规划（参照）分开统计，不混排。

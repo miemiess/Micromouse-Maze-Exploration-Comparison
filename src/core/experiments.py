@@ -2,7 +2,7 @@
 
 本模块只提供通用的运行、汇总、导出与画图；“跑哪些地图、哪些算法、几个种子”由各层的实验计划决定：
     - 基础规则：src/basic/plan.py（Docs/basic/experiment-plan.md）；
-    - 扩展：src/ext/plan.py（待建，Docs/ext/dev-plan.md）。
+    - 扩展：src/ext/plan.py（Docs/ext/experiment-plan.md）。
 各计划模块定义 PLANS = {名称: (构建函数, 默认输出目录)}，命令行 --plan <名称> 自动找到它们。
 本模块不依赖界面库，命令行与上位机“批量实验”页共用：
     - 每次运行都通过 algorithm_api.run_episode 执行，规则与上位机、测试完全一致；
@@ -55,6 +55,8 @@ SUMMARY_FIELDS = ["map_group", "algorithm", "experiment_mode", "runs", "success"
                   "mean_steps", "mean_ratio", "median_ratio", "max_ratio", "mean_turns",
                   "mean_repeat_visits", "mean_coverage", "median_compute_ms", "mean_expanded_nodes"]
 # 扩展规则（有代价层）时追加的列；基础规则不写这些列，输出格式与 basic-rules-v1 相同。
+COLLISION_RUN_FIELDS = ["actions", "collisions"]
+COLLISION_SUMMARY_FIELDS = ["mean_actions", "mean_collisions", "collision_run_rate"]
 RULE_RUN_FIELDS = ["rule", "rule_cost", "optimal_rule_cost", "rule_cost_ratio"]
 # 两阶段规则（flow 层）下追加的列：探索（含返回起点）、冲刺、成绩（见 src/ext/rules/two_phase.py）
 FLOW_RUN_FIELDS = ["explore_cost", "return_cost", "sprint_cost", "optimal_sprint_cost", "sprint_ratio", "total_score"]
@@ -96,7 +98,7 @@ class ExperimentRun:
 
     def __init__(self, maze_paths: list[Path], algorithms: list[str], *, seeds=(0,),
                  repeats: int = 1, max_steps: int | None = None, measure_memory: bool = False,
-                 experiment: str = "custom", rule: Ruleset = BASIC):
+                 experiment: str = "custom", rule: Ruleset = BASIC, include_collision_stats: bool = False):
         """记录实验设置。
 
         Args:
@@ -104,10 +106,11 @@ class ExperimentRun:
             algorithms: 算法名（由 discover_algorithms 发现）。
             seeds: 传给算法的种子；每个种子单独运行一次（只影响随机算法）。
             repeats: 同一组合重复运行的次数，计算时间取中位数（用于稳定计时）。
-            max_steps: 移动预算；None 时为 20 × 格子数。
+            max_steps: 动作预算；None 时为 20 × 格子数。
             measure_memory: 是否用 tracemalloc 另外运行一轮测峰值内存（会变慢，与计时分开）。
             experiment: 写入结果的实验名称。
             rule: 比赛规则（core.rules），默认基础规则；有代价层时额外记录规则代价与最优规则代价。
+            include_collision_stats: 首次撞墙终止模式也导出动作与碰撞统计。
         """
         self.infos, errors = discover_algorithms()
         if errors:
@@ -116,6 +119,7 @@ class ExperimentRun:
         if unknown:
             raise ValueError(f"unknown algorithms: {unknown}")
         self.rule = rule
+        self.include_collision_stats = include_collision_stats or rule.collision_limit != 1
         for name in algorithms:
             if not rule.supports(self.infos[name]):
                 raise ValueError(f"{name} does not support rule {rule.key}")
@@ -140,8 +144,8 @@ class ExperimentRun:
         return self.rule.cost_layer is not None
 
     def run_fields(self) -> list[str]:
-        """runs.csv 的列：基础列，扩展规则下另加规则代价列。"""
-        collision_fields = ["actions", "collisions"] if self.rule.collision_limit != 1 else []
+        """runs.csv 的列：基础列，以及启用的碰撞、规则代价与两阶段（探索 / 冲刺 / 成绩）列。"""
+        collision_fields = COLLISION_RUN_FIELDS if self.include_collision_stats else []
         flow_fields = FLOW_RUN_FIELDS if self.has_flow else []
         return RUN_FIELDS + collision_fields + (RULE_RUN_FIELDS if self.has_rule_cost else []) + flow_fields
 
@@ -164,7 +168,8 @@ class ExperimentRun:
         """运行一个组合并返回结果行（同时追加到 self.rows）。"""
         maze, shortest, optimal = self._maze(maze_path)
         info = self.infos[algorithm]
-        results = [run_episode(maze, info.create(), seed=seed, max_steps=self.max_steps, rule=self.rule)
+        results = [run_episode(maze, info.create(), seed=seed, max_steps=self.max_steps, rule=self.rule,
+                               include_collision_stats=self.include_collision_stats)
                    for _ in range(self.repeats)]
         first = results[0]
         times = [r["compute_seconds"] * 1000 for r in results]
@@ -188,7 +193,7 @@ class ExperimentRun:
             "peak_memory_bytes": self._peak_memory(maze, info, seed) if self.measure_memory else "",
             "error": (first.get("error") or "").strip().splitlines()[-1] if first.get("error") else "",
         }
-        if self.rule.collision_limit != 1:
+        if self.include_collision_stats:
             row.update(actions=first["actions"], collisions=first["collisions"])
         if self.has_flow:
             row.update({k: "" if first.get(k) is None else first[k] for k in FLOW_RUN_FIELDS})
@@ -218,22 +223,35 @@ class ExperimentRun:
                 progress(i, len(tasks))
         return self.rows
 
-    def metadata(self) -> dict:
-        """运行环境与设置，写入 metadata.json。"""
+    @property
+    def expected_rows(self) -> int:
+        return len(self.maze_paths) * len(self.algorithms) * len(self.seeds)
+
+    def settings(self) -> dict:
+        """返回预览和结果元数据共用的实验设置。"""
         return {
-            "rule": self.rule.metadata(),
-            "experiment": self.experiment, "started": self.started.isoformat(timespec="seconds"),
-            "finished": datetime.now().isoformat(timespec="seconds"),
-            "git_commit": _git_commit(), "python": sys.version.split()[0],
-            "platform": platform.platform(), "processor": platform.processor(),
-            "maps": len(self.maze_paths), "algorithms": self.algorithms,
+            "experiment": self.experiment, "rule": self.rule.metadata(),
+            "maps": len(self.maze_paths),
+            "map_files": [path.relative_to(ROOT).as_posix() if path.is_relative_to(ROOT)
+                          else path.as_posix() for path in self.maze_paths],
+            "algorithms": self.algorithms,
             "algorithm_info": {name: {"layer": self.infos[name].layer, "mode": self.infos[name].mode,
                                       "designed_for": sorted(self.infos[name].designed_for),
                                       "designed_for_rule": self.infos[name].designed_for_rule(self.rule)}
                                for name in self.algorithms},
-            "seeds": self.seeds,
-            "repeats": self.repeats, "max_steps": self.max_steps or "20 × 格子数",
-            "time_budget_seconds": 30.0, "measure_memory": self.measure_memory,
+            "seeds": self.seeds, "repeats": self.repeats,
+            "max_steps": self.max_steps or "20 × 格子数", "time_budget_seconds": 30.0,
+            "measure_memory": self.measure_memory, "expected_rows": self.expected_rows,
+            "timed_episodes": self.expected_rows * self.repeats, "run_fields": self.run_fields(),
+        }
+
+    def metadata(self) -> dict:
+        """运行环境与设置，写入 metadata.json。"""
+        return {
+            **self.settings(), "started": self.started.isoformat(timespec="seconds"),
+            "finished": datetime.now().isoformat(timespec="seconds"),
+            "git_commit": _git_commit(), "python": sys.version.split()[0],
+            "platform": platform.platform(), "processor": platform.processor(),
             "timing_scope": "只含算法 reset / plan / choose_direction；不含读图、环境检查、绘图与写盘",
             "runs": len(self.rows),
         }
@@ -278,6 +296,12 @@ def summarize(rows: list[dict]) -> list[dict]:
             "median_compute_ms": round(statistics.median(r["compute_ms"] for r in runs), 3),
             "mean_expanded_nodes": mean([r["expanded_nodes"] for r in runs]),
         })
+        if "collisions" in runs[0]:
+            summary[-1].update({
+                "mean_actions": mean([r["actions"] for r in runs]),
+                "mean_collisions": mean([r["collisions"] for r in runs]),
+                "collision_run_rate": round(sum(r["collisions"] > 0 for r in runs) / len(runs), 4),
+            })
         if any("rule_cost" in r for r in runs):
             cost_ratios = [r["rule_cost_ratio"] for r in ok if r["rule_cost_ratio"] != ""]
             summary[-1].update({
@@ -305,8 +329,14 @@ def write_outputs(run: ExperimentRun, out_dir: Path, *, plot: bool = True) -> Pa
         writer.writerows(run.rows)
     summary = summarize(run.rows)
     with (out_dir / "summary.csv").open("w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=SUMMARY_FIELDS + (RULE_SUMMARY_FIELDS if run.has_rule_cost else [])
-                                + (FLOW_SUMMARY_FIELDS if run.has_flow else []))
+        fields = list(SUMMARY_FIELDS)
+        if run.include_collision_stats:
+            fields.extend(COLLISION_SUMMARY_FIELDS)
+        if run.has_rule_cost:
+            fields.extend(RULE_SUMMARY_FIELDS)
+        if run.has_flow:
+            fields.extend(FLOW_SUMMARY_FIELDS)
+        writer = csv.DictWriter(f, fieldnames=fields)
         writer.writeheader()
         writer.writerows(summary)
     heading = "" if run.rule.is_basic else f"# 规则：{run.rule.title}\n\n"
@@ -334,6 +364,13 @@ def summary_markdown(summary: list[dict]) -> str:
                          f"{s['mean_turns']} | {s['mean_repeat_visits']} | {s['median_compute_ms']} | "
                          f"{s['mean_expanded_nodes']} |")
         lines.append("")
+        if "mean_collisions" in rows[0]:
+            lines += ["动作与碰撞（含成功和失败运行）", "",
+                      "| 地图组 | 算法 | 平均动作数 | 平均碰撞数 | 至少撞墙一次的比例 |",
+                      "| --- | --- | --- | --- | --- |"]
+            lines += [f"| {s['map_group']} | {s['algorithm']} | {s['mean_actions']} | "
+                      f"{s['mean_collisions']} | {s['collision_run_rate']:.2%} |" for s in rows]
+            lines.append("")
         if any("mean_rule_cost" in s for s in rows):
             lines += ["规则代价（成功运行；比值的分母为已知地图上的规则最优代价）：", "",
                       "| 地图组 | 算法 | 平均规则代价 | 代价/最优（均值） | 中位数 | 最大 |",
@@ -425,7 +462,8 @@ def plot_all(result_dir: Path) -> list[Path]:
     result_dir = Path(result_dir)
     metadata = result_dir / "metadata.json"
     settings = json.loads(metadata.read_text(encoding="utf-8")) if metadata.exists() else {}
-    rule_key = settings.get("rule", {}).get("key", BASIC.key)  # 图中只用英文 key，避免缺字
+    rule = settings.get("rule", {})
+    rule_spec = rule.get("spec", rule.get("key", BASIC.spec))
     rows = read_summary(result_dir)
     out = result_dir / "figures"
     out.mkdir(exist_ok=True)
@@ -441,8 +479,8 @@ def plot_all(result_dir: Path) -> list[Path]:
 
     def save(fig, name):
         fig.patch.set_facecolor(SURFACE)
-        if rule_key != BASIC.key:
-            fig.suptitle(f"Rule: basic + {rule_key}", color=INK, fontsize=10, x=0.01, ha="left")
+        if rule_spec != BASIC.spec:
+            fig.suptitle(f"Rule: {rule_spec}", color=INK, fontsize=10, x=0.01, ha="left")
         fig.tight_layout()
         path = out / name
         fig.savefig(path, dpi=150)
@@ -542,16 +580,20 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--rule", default=None, metavar="SPEC",
                         help="自选实验的规则，默认 basic；如 turn_cost:weight=2+collision:limit=3、collision:limit=unlimited、motion_time"
                              "（写法见 core.rules.parse_rule）。正式计划自带规则，不能另指定")
-    parser.add_argument("--maps", nargs="+", default=["mazes/classic/*.json"], help="地图路径或通配符")
-    parser.add_argument("--algorithms", nargs="+", default=["all"], help="算法名，all 表示全部")
-    parser.add_argument("--seeds", nargs="+", type=int, default=[0])
-    parser.add_argument("--repeats", type=int, default=1, help="重复次数，计算时间取中位数")
+    parser.add_argument("--maps", nargs="+", help="地图路径或通配符")
+    parser.add_argument("--algorithms", nargs="+", help="算法名，all 表示全部")
+    parser.add_argument("--seeds", nargs="+", type=int)
+    parser.add_argument("--repeats", type=int, help="重复次数，计算时间取中位数")
     parser.add_argument("--max-steps", type=int, default=None)
+    parser.add_argument("--collision-stats", action="store_true",
+                        help="自选实验中，即使首次撞墙就终止也导出动作和碰撞统计")
     parser.add_argument("--memory", action="store_true", help="另外运行一轮测量峰值内存")
     parser.add_argument("--out", type=Path, default=None,
                         help="输出目录；默认 --plan 写到计划目录，自选实验写到 results/local/<时间>")
     parser.add_argument("--no-plot", action="store_true")
-    parser.add_argument("--plot", nargs="+", type=Path, metavar="RESULT_DIR",
+    output_mode = parser.add_mutually_exclusive_group()
+    output_mode.add_argument("--dry-run", action="store_true", help="预览完整设置和输出路径，无执行和文件输出")
+    output_mode.add_argument("--plot", nargs="+", type=Path, metavar="RESULT_DIR",
                         help="不运行实验，只从这些结果目录的 summary.csv 重画图表")
     args = parser.parse_args(argv)
     if args.plot:
@@ -562,10 +604,14 @@ def main(argv: list[str] | None = None) -> None:
 
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     if args.plan:
+        overrides = {"--rule": args.rule, "--maps": args.maps, "--algorithms": args.algorithms,
+                     "--seeds": args.seeds, "--repeats": args.repeats, "--max-steps": args.max_steps,
+                     "--memory": args.memory or None, "--collision-stats": args.collision_stats or None}
+        supplied = [name for name, value in overrides.items() if value is not None]
+        if supplied:
+            parser.error(f"--plan 自带实验设置，不能覆盖 {', '.join(supplied)}")
         build, folder = plans[args.plan]
         runs = build()
-        if args.rule:
-            parser.error("--plan 的正式实验自带规则，不能再用 --rule 指定")
         base = args.out or RESULTS / folder
     else:
         try:
@@ -574,14 +620,22 @@ def main(argv: list[str] | None = None) -> None:
             parser.error(str(exc))
         infos = discover_algorithms()[0]
         algorithms = ([name for name, info in infos.items() if rule.supports(info)]
-                      if args.algorithms == ["all"] else args.algorithms)
-        runs = [ExperimentRun(expand_maps(args.maps), algorithms, seeds=args.seeds,
-                              repeats=args.repeats, max_steps=args.max_steps,
-                              measure_memory=args.memory, rule=rule)]
+                      if args.algorithms in (None, ["all"]) else args.algorithms)
+        runs = [ExperimentRun(expand_maps(args.maps or ["mazes/classic/*.json"]), algorithms,
+                              seeds=args.seeds or [0], repeats=1 if args.repeats is None else args.repeats,
+                              max_steps=args.max_steps,
+                              measure_memory=args.memory, rule=rule,
+                              include_collision_stats=args.collision_stats)]
         base = args.out or LOCAL_RESULTS / stamp
-    for run in runs:
-        total = len(run.tasks())
-        out = base / run.experiment if len(runs) > 1 else base
+    outputs = [base / run.experiment if len(runs) > 1 else base for run in runs]
+    if args.dry_run:
+        preview = {"plan": args.plan, "plots": not args.no_plot,
+                   "experiments": [{**run.settings(), "output_dir": str(out.resolve())}
+                                   for run, out in zip(runs, outputs)]}
+        print(json.dumps(preview, ensure_ascii=False, indent=2))
+        return
+    for run, out in zip(runs, outputs):
+        total = run.expected_rows
         run.run_all(lambda done, n: print(f"\r{run.experiment}: {done}/{n}", end="", flush=True))
         print(f"\r{run.experiment}: {total}/{total} -> {write_outputs(run, out, plot=not args.no_plot)}")
 
