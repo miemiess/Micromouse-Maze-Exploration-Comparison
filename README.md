@@ -95,18 +95,18 @@ mazes/                     地图：classic/ 下 514 张（外部迷宫库 exter
 
 ## 分工与贡献
 
-| 部分 | 内容 | 负责人 | 交付 |
-| --- | --- | --- | --- |
-| A1～A3 | 接口约定（坐标、地图 JSON、观测、策略接口、状态与指标）；环境；外部迷宫库 394 张与 4 种生成器 | yuchen-1412 | [`src/README.md`](src/README.md)、`src/core/environment.py`、[`mazes/`](mazes/README.md) |
-| B1～B3 | 算法登记与源码阅读；DFS、Flood-Fill、沿墙法、随机游走、贪心 DFS、重复 A* | mmy | [`Docs/basic/algorithm-methods.md`](Docs/basic/algorithm-methods.md)、`src/basic/algorithms/` |
-| C1～C3 | 新方案“先验增强重复 A*”的设计、实现、调参、消融与事后分析；已知地图参照 BFS、A* | mmy | [`Docs/basic/algorithm-design.md`](Docs/basic/algorithm-design.md)、`src/basic/`、`results/basic/dev/` |
-| D1～D3 | 基础实验计划、实验框架与正式实验、演示 | mmy | [`Docs/basic/experiment-plan.md`](Docs/basic/experiment-plan.md)、`src/core/experiments.py`、`results/basic/` |
-| E0、E1 | 规则框架（基础规则 + 叠加层、`--rule`、上位机规则面板）；转弯代价、运动时间、规则最优参照 | Luca | `src/core/rules.py`、`src/ext/rules/`、`tools/MazesTest/app/rule_bar.py` |
-| E3 | 朝向 A* 及加权变体、D* Lite、最近前沿探索 | zhouying682 | `src/ext/algorithms/` |
-| E2、撞墙处理 | 噪声观测层、置信度重规划及消融与改进；撞墙处理层 | Luca、zhouying682 | `src/ext/rules/noisy_sensor.py`、`collision.py`、`src/ext/algorithms/belief_astar.py` |
-| D4、D5 | 迷宫难度刻画与对抗迷宫；两阶段比赛与误差有界提前停止 | Luca | `src/ext/difficulty.py`、`src/ext/rules/two_phase.py`、`src/ext/algorithms/bounded_explore.py` |
-| 扩展实验与报告 | 扩展实验计划、X1～X4、分析与事后验证；报告第 3 章 | Luca | [`Docs/ext/experiment-plan.md`](Docs/ext/experiment-plan.md)、`src/ext/plan.py`、`analysis.py`、`posthoc.py`、`results/ext/` |
-| 收尾 | 见上方清单 | 全员 | [`Docs/Result.md`](Docs/Result.md) |
+| 部分 | 内容 | 交付 |
+| --- | --- | --- |
+| A1～A3 | 接口约定（坐标、地图 JSON、观测、策略接口、状态与指标）；环境；外部迷宫库 394 张与 4 种生成器 | [`src/README.md`](src/README.md)、`src/core/environment.py`、[`mazes/`](mazes/README.md) |
+| B1～B3 | 算法登记与源码阅读；DFS、Flood-Fill、沿墙法、随机游走、贪心 DFS、重复 A* | [`Docs/basic/algorithm-methods.md`](Docs/basic/algorithm-methods.md)、`src/basic/algorithms/` |
+| C1～C3 | 新方案“先验增强重复 A*”的设计、实现、调参、消融与事后分析；已知地图参照 BFS、A* | [`Docs/basic/algorithm-design.md`](Docs/basic/algorithm-design.md)、`src/basic/`、`results/basic/dev/` |
+| D1～D3 | 基础实验计划、实验框架与正式实验、演示 | [`Docs/basic/experiment-plan.md`](Docs/basic/experiment-plan.md)、`src/core/experiments.py`、`results/basic/` |
+| E0、E1 | 规则框架（基础规则 + 叠加层、`--rule`、上位机规则面板）；转弯代价、运动时间、规则最优参照 | `src/core/rules.py`、`src/ext/rules/`、`tools/MazesTest/app/rule_bar.py` |
+| E3 | 朝向 A* 及加权变体、D* Lite、最近前沿探索 | `src/ext/algorithms/` |
+| E2、撞墙处理 | 噪声观测层、置信度重规划及消融与改进；撞墙处理层 | `src/ext/rules/noisy_sensor.py`、`collision.py`、`src/ext/algorithms/belief_astar.py` |
+| D4、D5 | 迷宫难度刻画与对抗迷宫；两阶段比赛与误差有界提前停止 | `src/ext/difficulty.py`、`src/ext/rules/two_phase.py`、`src/ext/algorithms/bounded_explore.py` |
+| 扩展实验与报告 | 扩展实验计划、X1～X4、分析与事后验证；报告第 3 章 | [`Docs/ext/experiment-plan.md`](Docs/ext/experiment-plan.md)、`src/ext/plan.py`、`analysis.py`、`posthoc.py`、`results/ext/` |
+| 收尾 | 见上方清单 | [`Docs/Result.md`](Docs/Result.md) |
 
 详细的开发记录（谁在何时做了什么）见 [`Docs/log.txt`](Docs/log.txt)。
 
