@@ -34,13 +34,13 @@ SPEEDS = [1, 2, 4, 8, 15, 30, 60, 120, 300, 1000]
 STATUS_TEXT = {"running": "运行中", "success": "到达目标", "no_path": "无路可走",
                "loop_detected": "陷入循环",
                "budget_exceeded": "超出步数预算", "timeout": "计算超时",
-               "invalid_action": "非法动作", "error": "策略异常"}
+               "collision_limit": "达到撞墙上限", "invalid_action": "非法动作", "error": "策略异常"}
 
 DIRECTION_TEXT = {Direction.NORTH: "北 N", Direction.EAST: "东 E",
                   Direction.SOUTH: "南 S", Direction.WEST: "西 W"}
 
 # 统计项：(显示名, Snapshot.stats 中的键)。
-STAT_ROWS = [("状态", "status"), ("决策次数", "decisions"), ("移动步数", "steps"),
+STAT_ROWS = [("状态", "status"), ("决策次数", "decisions"), ("移动步数", "steps"), ("撞墙次数", "collisions"), ("已用动作", "actions"),
              ("90° 转向", "turns_90"), ("重复访问", "repeat_visits"),
              ("覆盖率", "coverage"), ("已观测墙", "observed_walls"),
              ("计算时间", "compute_seconds")]
@@ -197,7 +197,7 @@ class RunController(QObject):
 
 
 class ControlBox(QGroupBox):
-    """运行控制：随机种子、移动预算、重置/单步/运行/跑完按钮、速度滑块。
+    """运行控制：随机种子、动作预算、重置/单步/运行/跑完按钮、速度滑块。
 
     Signals:
         settingsChanged: 种子或预算改变，需要重新创建 Runner。
@@ -242,7 +242,7 @@ class ControlBox(QGroupBox):
 
         form = QFormLayout(self)
         form.addRow("随机种子", self.seed)
-        form.addRow("移动预算", self.budget)
+        form.addRow("动作预算", self.budget)
         form.addRow(buttons)
         form.addRow("速度", speed_row)
 
@@ -251,7 +251,7 @@ class ControlBox(QGroupBox):
         return None if self.seed.value() < 0 else self.seed.value()
 
     def budget_value(self) -> int | None:
-        """当前移动预算；"默认" 时为 None。"""
+        """当前动作预算；"默认" 时为 None。"""
         return self.budget.value() or None
 
     def _speed_changed(self, level: int) -> None:
@@ -534,7 +534,7 @@ class RunTab(QWidget):
                 f"{prefix} 上一格发现 {len(cause)} 面新墙 → 路线重新规划" if cause
                 else f"{prefix} 路线重新规划")
         if snap.blocked:
-            self.log.appendPlainText(f"{prefix} 试图向 {snap.blocked[1].value} 穿墙，非法动作")
+            self.log.appendPlainText(f"{prefix} 试图向 {snap.blocked[1].value} 撞墙")
         if snap.status != "running" and snap.decision > 0:
             stats = snap.stats
             self.log.appendPlainText(
@@ -554,7 +554,7 @@ class CompareTab(QWidget):
     """同一张地图上多个算法同步运行，并排显示并用表格对比统计。"""
 
     MAX_ALGORITHMS = 4
-    COLUMNS = [("算法", None), ("状态", "status"), ("移动步数", "steps"),
+    COLUMNS = [("算法", None), ("状态", "status"), ("移动步数", "steps"), ("撞墙次数", "collisions"), ("已用动作", "actions"),
                ("90° 转向", "turns_90"), ("重复访问", "repeat_visits"),
                ("覆盖率", "coverage"), ("计算时间", "compute_seconds")]
 

@@ -162,9 +162,9 @@ class CostMeter:
         self._closed = 0.0      # 已结束的直线段与全部转向的代价
         self._run = 0           # 当前直线段的格数
 
-    def add(self, move: Direction) -> None:
+    def add(self, move: Direction, *, moved: bool = True) -> None:
         """记录一次沿 move 方向的移动（移动前若方向改变，先原地转向）。"""
-        if self._run and move == self.heading:
+        if moved and self._run and move == self.heading:
             self._run += 1
             return
         if self._run:
@@ -172,7 +172,7 @@ class CostMeter:
         turns = quarter_turns(self.heading, move)
         if turns:
             self._closed += self.layer.turn_cost(turns)
-        self.heading, self._run = move, 1
+        self.heading, self._run = move, int(moved)
 
     @property
     def total(self) -> float:
@@ -185,8 +185,11 @@ class CostMeter:
 class Ruleset:
     """一套比赛规则：基础规则 + 叠加层（每个维度最多一层）。不可变，可比较、可哈希。"""
     layers: tuple[RuleLayer, ...] = ()
+    collision_limit: int | None = 1  # None 表示不限次数
 
     def __post_init__(self):
+        if self.collision_limit is not None and (type(self.collision_limit) is not int or self.collision_limit < 1):
+            raise ValueError("collision limit must be a positive integer or unlimited")
         dims = [layer.dimension for layer in self.layers]
         duplicated = {d for d in dims if dims.count(d) > 1}
         if duplicated:
@@ -201,28 +204,37 @@ class Ruleset:
     # -- 描述 --------------------------------------------------------------
     @property
     def is_basic(self) -> bool:
-        return not self.layers
+        return not self.layers and self.collision_limit == 1
 
     @property
     def key(self) -> str:
         """唯一标识：基础规则为 "basic"，否则为各层 key 用 "+" 连接。"""
-        return "+".join(layer.key for layer in self.layers) or "basic"
+        keys = [layer.key for layer in self.layers]
+        if self.collision_limit != 1:
+            keys.append("collision")
+        return "+".join(keys) or "basic"
 
     @property
     def spec(self) -> str:
         """可复现的写法（parse_rule 能还原），如 "basic"、"turn_cost:weight=2"。"""
-        if not self.layers:
+        if self.is_basic:
             return "basic"
         parts = []
         for layer in self.layers:
             args = ",".join(f"{f.name}={getattr(layer, f.name):g}" for f in fields(layer))
             parts.append(f"{layer.key}:{args}" if args else layer.key)
+        if self.collision_limit != 1:
+            limit = self.collision_limit if self.collision_limit is not None else "unlimited"
+            parts.append(f"collision:limit={limit}")
         return "+".join(parts)
 
     @property
     def title(self) -> str:
         """界面标题，如 "基础规则" 或 "基础规则 + 转弯代价（λ = 1.0）"。"""
-        return " + ".join(["基础规则", *(layer.label() for layer in self.layers)])
+        parts = ["基础规则", *(layer.label() for layer in self.layers)]
+        if self.collision_limit != 1:
+            parts.append("撞墙后继续" if self.collision_limit is None else f"累计 {self.collision_limit} 次撞墙终止")
+        return " + ".join(parts)
 
     @property
     def color(self) -> str:
@@ -253,11 +265,12 @@ class Ruleset:
         """替换（或用 None 移除）某个维度上的层，返回新规则。"""
         dim = layer.dimension if layer is not None else dimension
         kept = [l for l in self.layers if l.dimension != dim]
-        return Ruleset(tuple(kept + ([layer] if layer is not None else [])))
+        return Ruleset(tuple(kept + ([layer] if layer is not None else [])), self.collision_limit)
 
     def metadata(self) -> dict:
         """写入 metadata.json 的规则描述。"""
         return {"key": self.key, "spec": self.spec, "title": self.title,
+                "collision": {"limit": self.collision_limit},
                 "layers": [{"key": l.key, "dimension": l.dimension, "params": l.params()}
                            for l in self.layers]}
 
@@ -265,7 +278,7 @@ class Ruleset:
     def make_env(self, maze: Maze, max_steps: int | None):
         """创建环境：基础环境依次经过各层的 wrap_env。"""
         from core.environment import MazeEnvironment
-        env = MazeEnvironment(maze, max_steps=max_steps)
+        env = MazeEnvironment(maze, max_steps=max_steps, collision_limit=self.collision_limit)
         for layer in self.layers:
             env = layer.wrap_env(env)
         return env
@@ -344,8 +357,17 @@ def parse_rule(spec: str) -> Ruleset:
         return BASIC
     layers_by_key = available_layers()
     layers = []
+    collision_limit = 1
+    collision_seen = False
     for part in spec.split("+"):
         key, _, args = part.partition(":")
+        if key == "collision":
+            if collision_seen or not args.startswith("limit="):
+                raise ValueError("specify collision:limit=N or collision:limit=unlimited once")
+            value = args.removeprefix("limit=")
+            collision_limit = None if value == "unlimited" else int(value)
+            collision_seen = True
+            continue
         if key not in layers_by_key:
             raise ValueError(f"unknown rule layer {key!r}; available: basic, {', '.join(layers_by_key)}")
         cls = layers_by_key[key]
@@ -357,7 +379,7 @@ def parse_rule(spec: str) -> Ruleset:
                 raise ValueError(f"layer {key!r} has no parameter {name!r}; parameters: {', '.join(types)}")
             kwargs[name] = float(value)
         layers.append(cls(**kwargs))
-    return Ruleset(tuple(layers))
+    return Ruleset(tuple(layers), collision_limit)
 
 
 def preset_rules() -> dict[str, Ruleset]:

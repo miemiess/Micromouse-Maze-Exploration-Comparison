@@ -16,7 +16,8 @@ from dataclasses import fields
 from PySide6.QtCore import QSignalBlocker, Qt, Signal
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (QComboBox, QDoubleSpinBox, QFrame, QHBoxLayout, QLabel, QPushButton,
-                               QStyledItemDelegate, QStyleOptionViewItem, QVBoxLayout, QWidget)
+                               QSpinBox, QStyledItemDelegate, QStyleOptionViewItem,
+                               QVBoxLayout, QWidget)
 
 from core.rules import BASIC, BASIC_COLOR, DIMENSIONS, Ruleset, available_layers
 
@@ -116,6 +117,17 @@ class RulePanel(QFrame):
                 self.param_boxes[cls.key] = box
                 self.config_row.addWidget(box)
             self.config_row.addSpacing(16)
+        self.collision = QComboBox()
+        self.collision.addItems(["首次撞墙终止", "撞墙后继续", "累计 N 次撞墙终止"])
+        self.limit = QSpinBox()
+        self.limit.setRange(1, 2147483647)
+        self.limit.setValue(3)
+        self.limit.setKeyboardTracking(False)
+        self.config_row.addWidget(QLabel("碰撞"))
+        self.config_row.addWidget(self.collision)
+        self.config_row.addWidget(self.limit)
+        self.collision.currentIndexChanged.connect(self._emit)
+        self.limit.valueChanged.connect(self._emit)
         self.config_row.addStretch(1)
         if not self.selectors:
             self.config_row.addWidget(QLabel("（src/ext/rules/ 中还没有可叠加的规则层）"))
@@ -131,7 +143,7 @@ class RulePanel(QFrame):
     def set_rule(self, rule: Ruleset) -> None:
         """按 rule 同步全部控件与配色（不发出信号）。"""
         self.rule = rule
-        blockers = [QSignalBlocker(w) for w in [*self.selectors.values(), *self.spins.values()]]
+        blockers = [QSignalBlocker(w) for w in [*self.selectors.values(), *self.spins.values(), self.collision, self.limit]]
         for dimension, combo in self.selectors.items():
             layer = rule.layer(dimension)
             combo.setCurrentIndex(max(0, combo.findData(layer.key if layer else None)))
@@ -141,6 +153,11 @@ class RulePanel(QFrame):
             if active is not None:
                 for f in fields(active):
                     self.spins[(key, f.name)].setValue(getattr(active, f.name))
+        mode = 1 if rule.collision_limit is None else 0 if rule.collision_limit == 1 else 2
+        self.collision.setCurrentIndex(mode)
+        if mode == 2:
+            self.limit.setValue(rule.collision_limit)
+        self.limit.setVisible(mode == 2)
         del blockers
         self._refresh_stack()
 
@@ -154,12 +171,14 @@ class RulePanel(QFrame):
                 continue
             cls = self.layer_classes[key]
             layers.append(cls(**{f.name: self.spins[(key, f.name)].value() for f in fields(cls)}))
-        return Ruleset(tuple(layers))
+        limit = (1, None, self.limit.value())[self.collision.currentIndex()]
+        return Ruleset(tuple(layers), limit)
 
     def _emit(self, *_args) -> None:
         """下拉框或参数改变：显示对应的参数框，并请求切换规则。"""
         for key, box in self.param_boxes.items():
             box.setVisible(any(c.currentData() == key for c in self.selectors.values()))
+        self.limit.setVisible(self.collision.currentIndex() == 2)
         rule = self.current_selection()
         if rule != self.rule:
             self.ruleRequested.emit(rule)
@@ -186,6 +205,8 @@ class RulePanel(QFrame):
             self.formula.setText(f"<span style='color:#495057'>{BASIC_DESCRIPTION}</span>")
         else:
             text = cost.formula if cost else "；".join(l.summary for l in rule.layers)
+            if rule.collision_limit != 1:
+                text += (" · " if text else "") + self.collision.currentText().replace("N", str(rule.collision_limit))
             self.formula.setText(
                 f"<b style='color:{rule.color}'>{text}</b>"
                 "<span style='color:#495057'>　·　结果不可与基础规则直接比较</span>")

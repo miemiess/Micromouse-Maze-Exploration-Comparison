@@ -138,7 +138,8 @@ class ExperimentRun:
 
     def run_fields(self) -> list[str]:
         """runs.csv 的列：基础列，扩展规则下另加规则代价列。"""
-        return RUN_FIELDS + (RULE_RUN_FIELDS if self.has_rule_cost else [])
+        collision_fields = ["actions", "collisions"] if self.rule.collision_limit != 1 else []
+        return RUN_FIELDS + collision_fields + (RULE_RUN_FIELDS if self.has_rule_cost else [])
 
     def _maze(self, path: Path) -> tuple[Maze, int | None, float | None]:
         """读取地图，计算已知地图最短路长度与本规则下的最优代价（不可达时为 None），结果缓存。"""
@@ -172,11 +173,13 @@ class ExperimentRun:
             "coverage": round(len(set(map(tuple, path))) / (maze.width * maze.height), 4),
             "compute_ms": round(statistics.median(times), 3),
             "compute_ms_min": round(min(times), 3), "repeats": self.repeats,
-            "consistent": all(r["path"] == path and r["status"] == first["status"] for r in results),
+            "consistent": all(all(r[k] == first[k] for k in ("path", "status", "collisions", "actions", "turns_90")) for r in results),
             "expanded_nodes": first.get("expanded_nodes", ""),
             "peak_memory_bytes": self._peak_memory(maze, info, seed) if self.measure_memory else "",
             "error": (first.get("error") or "").strip().splitlines()[-1] if first.get("error") else "",
         }
+        if self.rule.collision_limit != 1:
+            row.update(actions=first["actions"], collisions=first["collisions"])
         if self.has_rule_cost:
             cost = first.get("rule_cost")
             row.update({"rule": self.rule.key, "rule_cost": cost,
@@ -511,7 +514,7 @@ def main(argv: list[str] | None = None) -> None:
     plans = available_plans()
     parser.add_argument("--plan", choices=sorted(plans), help="按某一层的实验计划运行全部正式实验")
     parser.add_argument("--rule", default=None, metavar="SPEC",
-                        help="自选实验的规则，默认 basic；如 turn_cost、turn_cost:weight=2、motion_time"
+                        help="自选实验的规则，默认 basic；如 turn_cost:weight=2+collision:limit=3、collision:limit=unlimited、motion_time"
                              "（写法见 core.rules.parse_rule）。正式计划自带规则，不能另指定")
     parser.add_argument("--maps", nargs="+", default=["mazes/classic/*.json"], help="地图路径或通配符")
     parser.add_argument("--algorithms", nargs="+", default=["all"], help="算法名，all 表示全部")

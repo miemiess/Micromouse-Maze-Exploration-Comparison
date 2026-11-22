@@ -33,11 +33,18 @@ class Observation:
 
 
 @dataclass(frozen=True)
+class ContactObservation(Observation):
+    """碰撞后由接触确认的墙。"""
+    collision_wall: Direction
+
+
+@dataclass(frozen=True)
 class StepResult:
     """一次移动后的观测、运行状态及是否成功移动。"""
     observation: Observation
     status: str
     moved: bool
+    collided: bool = False
 
 
 class Maze:
@@ -131,7 +138,7 @@ class Maze:
 class MazeEnvironment:
     """管理电脑鼠的位置、观测、移动和本次运行的统计。"""
 
-    def __init__(self, maze: Maze, max_steps: int | None = None):
+    def __init__(self, maze: Maze, max_steps: int | None = None, *, collision_limit: int | None = 1):
         """创建环境并回到起点。
 
         Args:
@@ -149,6 +156,9 @@ class MazeEnvironment:
             max_steps = 20 * maze.width * maze.height
         if type(max_steps) is not int or max_steps <= 0:
             raise ValueError("max_steps must be a positive integer")
+        if collision_limit is not None and (type(collision_limit) is not int or collision_limit < 1):
+            raise ValueError("collision_limit must be a positive integer or None")
+        self.collision_limit = collision_limit
         self._maze = maze
         self.max_steps = max_steps
         self.reset()
@@ -162,6 +172,8 @@ class MazeEnvironment:
         self.position = self._maze.start
         self.heading = self._maze.start_heading
         self.steps = self.repeat_visits = self.turns_90 = 0
+        self.actions = self.collisions = 0
+        self.collision_wall = None
         self.path = [self.position]
         # 起点已访问一次，但不算重复访问；起点也是目标时立即成功。
         self._visited = {self.position}
@@ -183,6 +195,8 @@ class MazeEnvironment:
                      0 <= neighbour[1] < self._maze.height)
                     or frozenset((self.position, neighbour)) in self._maze._walls):
                 walls.add(direction)
+        if self.collision_wall is not None and self.collision_limit != 1:
+            return ContactObservation(self.position, self.heading, frozenset(walls), self.steps, self.collision_wall)
         return Observation(self.position, self.heading, frozenset(walls), self.steps)
 
     def step(self, direction):
@@ -199,15 +213,30 @@ class MazeEnvironment:
         """
         if self.status != "running":
             raise RuntimeError("cannot step after the run has ended")
-        if not isinstance(direction, Direction) or direction in self.observe().walls:
+        self.collision_wall = None
+        if not isinstance(direction, Direction):
             self.status = "invalid_action"
             return StepResult(self.observe(), self.status, False)
+        self.actions += 1
+        collided = direction in self.observe().walls
+        if collided:
+            self.collisions += 1
+            self.collision_wall = direction
+            if self.collision_limit == 1:  # 兼容基础规则的终止状态与朝向统计
+                self.status = "invalid_action"
+                return StepResult(self.observe(), self.status, False, True)
         # 取顺时针与逆时针中较短的转向：直行 0，左右转 1，掉头 2。
         difference = abs(_DIRECTIONS.index(direction) - _DIRECTIONS.index(self.heading))
         self.turns_90 += min(difference, 4 - difference)
+        self.heading = direction
+        if collided:
+            if self.collision_limit is not None and self.collisions >= self.collision_limit:
+                self.status = "collision_limit"
+            elif self.actions >= self.max_steps:
+                self.status = "budget_exceeded"
+            return StepResult(self.observe(), self.status, False, True)
         dx, dy = _DELTAS[direction]
         self.position = (self.position[0] + dx, self.position[1] + dy)
-        self.heading = direction
         self.steps += 1
         # 每次进入曾访问的格子，重复访问次数加一。
         if self.position in self._visited:
@@ -217,7 +246,7 @@ class MazeEnvironment:
         # 到达目标优先于预算耗尽，因此最后一步到达目标仍算成功。
         if self.position in self._maze.goals:
             self.status = "success"
-        elif self.steps >= self.max_steps:
+        elif self.actions >= self.max_steps:
             self.status = "budget_exceeded"
         return StepResult(self.observe(), self.status, True)
 
@@ -247,7 +276,7 @@ class MazeEnvironment:
         Returns:
             包含状态、步数、重复访问、转向、耗时、路径和内存的字典。
         """
-        return {"status": self.status, "steps": self.steps,
+        return {"status": self.status, "steps": self.steps, "actions": self.actions, "collisions": self.collisions,
                 "repeat_visits": self.repeat_visits, "turns_90": self.turns_90,
                 "compute_seconds": compute_seconds, "path": list(self.path),
                 "peak_memory_bytes": peak_memory_bytes}

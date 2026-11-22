@@ -288,8 +288,17 @@ class StepResult:
 4. 更新步数、访问次数、路径和新位置观测；
 5. 先判断是否到达目标，再判断是否用完移动预算。
 
-策略返回非法类型、越界方向或尝试穿过已观测墙壁时，本轮记为 `invalid_action` 并立即
+基础规则下，策略返回非法类型、越界方向或尝试穿过已观测墙壁时，本轮记为 `invalid_action` 并立即
 终止；该动作不增加移动步数、转弯数或路径。环境不得静默忽略错误或替策略选择其他方向。
+
+### 碰撞策略
+
+上位机碰撞菜单和命令行共用一个次数上限。默认上限 1 保留首次撞墙时的原行为；
+`--rule collision:limit=unlimited` 允许继续，`--rule turn_cost:weight=2+collision:limit=3`
+在第 3 次累计撞墙时终止。运动时间层也可组合。metadata 的 collision.limit 为 null 时表示不限次数。
+每次有效方向尝试消耗一次动作预算。恢复模式下碰墙会原地转到尝试方向，结束当前直行段，
+不增加步数、路径长度或访问次数。接触后的观测以 `collision_wall` 标记方向，
+且 `walls` 包含该方向，优先于传感器读数。碰撞上限与预算同时触发时优先报告碰撞上限。
 
 ## 运行与终止状态
 
@@ -301,7 +310,8 @@ class StepResult:
 | `success` | 到达任意目标格 |
 | `no_path` | 策略返回 `None`，声明无法继续 |
 | `loop_detected` | 策略返回 `None` 且 `loop_detected` 为真：判定陷入循环（目标可能可达，只是该策略到不了） |
-| `budget_exceeded` | 达到移动预算仍未到达目标 |
+| `collision_limit` | 撞墙累计达到配置上限（N > 1） |
+| `budget_exceeded` | 达到动作预算仍未到达目标 |
 | `timeout` | 累计策略计算时间超过统一预算 |
 | `invalid_action` | 非法方向、越界或尝试穿墙 |
 | `error` | 策略或环境出现未处理异常 |

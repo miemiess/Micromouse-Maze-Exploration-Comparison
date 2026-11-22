@@ -30,7 +30,7 @@ from pathlib import Path
 from time import perf_counter
 from typing import Protocol
 
-from core.environment import Cell, Direction, Maze, MazeEnvironment, Observation
+from core.environment import ContactObservation, Cell, Direction, Maze, MazeEnvironment, Observation
 from core.planning import KnownWalls, SearchResult, cost_lower_bound, heading_search
 from core.rules import BASIC, Ruleset
 
@@ -491,12 +491,17 @@ class Runner:
                 result = self.env.step(direction)
                 moved = result.moved
                 self._observation = result.observation
-                if moved and self._meter is not None:
-                    self._meter.add(direction)
-                if not moved:
+                if result.collided and self.rule.collision_limit != 1:
+                    # 接触证据优先于外层传感器包装产生的噪声。
+                    obs = result.observation
+                    self._observation = ContactObservation(obs.position, obs.heading, obs.walls | {direction},
+                                                           obs.step_count, direction)
+                if self._meter is not None and (moved or (result.collided and self.rule.collision_limit != 1)):
+                    self._meter.add(direction, moved=moved)
+                if result.collided:
                     blocked = (self.env.position, direction)
-                elif self.mode == EXPLORE:
-                    new_walls = self._record_walls(result.observation)
+                if self.mode == EXPLORE and (moved or result.collided):
+                    new_walls = self._record_walls(self._observation)
         except Exception:
             self._fail()
         self._last = self._snapshot(moved=moved, new_walls=new_walls,
